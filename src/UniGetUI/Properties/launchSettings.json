@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "UniGetUI (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "UniGetUI (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}

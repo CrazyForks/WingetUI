@@ -1,0 +1,20 @@
+name: Publish prereleases to WinGet
+
+on:
+  release:
+    types: [published]  # Trigger on published release (includes prereleases)
+  workflow_dispatch:
+
+jobs:
+  publish:
+    if: github.event.release.prerelease == true  # Ensure this only runs for prereleases
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Publish to WinGet
+        uses: vedantmgoyal9/winget-releaser@a3ac67b0c3026bc335a33b722188e3ec769d6a64
+        with:
+          identifier: MartiCliment.UniGetUI.Pre-Release
+          installers-regex: 'UniGetUI\.Installer\.exe$'
+          version: ${{ github.event.release.tag_name }}
+          token: ${{ secrets.WINGET_TOKEN }}

@@ -1,48 +1,66 @@
-
-
 @echo off
-
 
 rem update resources
 python scripts/apply_versions.py
+
 pushd scripts
 python download_translations.py
 popd ..
 
 rem clean old builds
 taskkill /im wingetui.exe /f
-rmdir /Q /S src\wingetui\obj
-rmdir /Q /S src\wingetui\bin
+taskkill /im unigetui.exe /f
+
+rem Run tests
+dotnet test src/UniGetUI.sln -v q --nologo
+
+rem check exit code of the last command
+if %errorlevel% neq 0 (
+    echo "The tests failed!."
+    pause
+)
 
 rem build executable
-pushd src 
-nuget restore
-popd ..
-"C:\Program Files\Microsoft Visual Studio\2022\Preview\MSBuild\Current\Bin\amd64\MSBuild.exe" src/wingetui/wingetui.csproj /noLogo /property:Configuration=Release /property:Platform=x64
-
+dotnet clean src/UniGetUI.sln -v m -nologo
+dotnet publish src/UniGetUI/UniGetUI.csproj /noLogo /property:Configuration=Release /property:Platform=x64 -v m
+if %errorlevel% neq 0 (
+    echo "DotNet publish has failed!"
+    pause
+)
 rem sign code
-pushd Y:\WingetUI-Store\src\wingetui\bin\x64\Release\net8.0-windows10.0.19041.0
-"Y:\- Signing\signtool-x64\signtool.exe" sign /v /debug /fd SHA256 /tr "http://timestamp.acs.microsoft.com" /td SHA256 /dlib "Y:\- Signing\azure.codesigning.client\x64\Azure.CodeSigning.Dlib.dll" /dmdf "Y:\- Signing\metadata.json" "wingetui.exe" "wingetui.dll"
+
+rmdir /Q /S unigetui_bin
+
+mkdir unigetui_bin
+robocopy src\UniGetUI\bin\x64\Release\net8.0-windows10.0.26100.0\win-x64\publish unigetui_bin *.* /MOVE /E
+
+set /p signfiles="Do you want to sign the files? [Y/n]: "
+if /i "%signfiles%" neq "n" (
+    %signcommand% "unigetui_bin/UniGetUI.exe" "unigetui_bin/UniGetUI.dll" "unigetui_bin/UniGetUI.*.dll" "unigetui_bin/ExternalLibraries.*.dll"
+
+    if %errorlevel% neq 0 (
+        echo "Signing has failed!"
+        pause
+    )
+)
+
+pushd unigetui_bin
+copy UniGetUI.exe WingetUI.exe
 popd
-pause
 
 set INSTALLATOR="%SYSTEMDRIVE%\Program Files (x86)\Inno Setup 6\ISCC.exe"
 if exist %INSTALLATOR% (
-    %INSTALLATOR% "WingetUI.iss"
-    echo You may now sign the installer
-    "Y:\- Signing\signtool-x64\signtool.exe" sign /v /debug /fd SHA256 /tr "http://timestamp.acs.microsoft.com" /td SHA256 /dlib "Y:\- Signing\azure.codesigning.client\x64\Azure.CodeSigning.Dlib.dll" /dmdf "Y:\- Signing\metadata.json" "WingetUI Installer.exe"
+    %INSTALLATOR% "UniGetUI.iss"
+    %signcommand% "UniGetUI Installer.exe"
+    del "WingetUI Installer.exe"
+    copy "UniGetUI Installer.exe" "WingetUI Installer.exe" 
     pause
-    "wingetui Installer.exe"
+    echo Hash: 
+    pwsh.exe -Command "(Get-FileHash '.\UniGetUI Installer.exe').Hash"
+    echo .
+    "UniGetUI Installer.exe"
 ) else (
     echo "Make installer was skipped, because the installer is missing."
-    echo "Running WingetUI..."
-    start /b wingetuiBin/wingetui.exe
 )
 
-goto:end
-
-:error
-echo "Error!"
-
-:end
 pause

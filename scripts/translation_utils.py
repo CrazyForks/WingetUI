@@ -5,7 +5,7 @@ import re
 import tolgee_requests
 
 root_dir = os.path.join(os.path.dirname(__file__), "..")
-os.chdir(os.path.join(root_dir, "src/wingetui/"))
+os.chdir(os.path.join(root_dir, "src/"))
 
 
 __blacklist_strings = [
@@ -24,8 +24,8 @@ def remove_special_chars(string):
 def get_all_strings():
     translation_strings: list[str] = []
 
-    # Find c# translation strings
-    regex1 = r'(?<=Translate\(["\']).+?(?=["\']\))'
+    # Find C# translation strings
+    regex1 = r'Translate\([\r\n ]{0,}["\']((?:\\.|[^\"])+)?["\'][,\) \n]'
     regex2 = r'(?<=AutoTranslated\(["\']).+?(?=["\']\))'
     for (dirpath, _dirnames, filenames) in os.walk(".", topdown=True):
         for file in filenames:
@@ -42,14 +42,16 @@ def get_all_strings():
                     translation_strings.append(match.encode('raw_unicode_escape').decode('unicode_escape'))
 
     # Find XAML translation strings
-
     MAIN_WILDCARD = r'(?:x:|"&#x[a-zA-Z0-9]{4};"|[ a-zA-Z0-9=\"\'\r\n\t_\.\,\:\;\{\}])'
 
     regex_data = {
+        r'(?<=Translate\(["\']).+?(?=["\']\))': lambda match: match.encode('raw_unicode_escape').decode('unicode_escape'),
         r'<[a-zA-Z0-9]+:TranslatedTextBlock' + MAIN_WILDCARD + r'+Text=["\'].+["\']' + MAIN_WILDCARD + r'*\/?>': lambda match: match.split(" Text=\"")[1].split("\"")[0].encode('raw_unicode_escape').decode('unicode_escape'),
         r'<[a-zA-Z0-9]+:ButtonCard' + MAIN_WILDCARD + r'+Text=["\'].+["\']' + MAIN_WILDCARD + r'*\/?>': lambda match: match.split(" Text=\"")[1].split("\"")[0].encode('raw_unicode_escape').decode('unicode_escape'),
         r'<[a-zA-Z0-9]+:ButtonCard' + MAIN_WILDCARD + r'+ButtonText=["\'].+["\']' + MAIN_WILDCARD + r'*\/?>': lambda match: match.split(" ButtonText=\"")[1].split("\"")[0].encode('raw_unicode_escape').decode('unicode_escape'),
         r'<[a-zA-Z0-9]+:CheckboxCard' + MAIN_WILDCARD + r'+Text=["\'].+["\']' + MAIN_WILDCARD + r'*\/?>': lambda match: match.split(" Text=\"")[1].split("\"")[0].encode('raw_unicode_escape').decode('unicode_escape'),
+        r'<[a-zA-Z0-9]+:CheckboxButtonCard' + MAIN_WILDCARD + r'+CheckboxText=["\'].+["\']' + MAIN_WILDCARD + r'*\/?>': lambda match: match.split(" CheckboxText=\"")[1].split("\"")[0].encode('raw_unicode_escape').decode('unicode_escape'),
+        r'<[a-zA-Z0-9]+:CheckboxButtonCard' + MAIN_WILDCARD + r'+ButtonText=["\'].+["\']' + MAIN_WILDCARD + r'*\/?>': lambda match: match.split(" ButtonText=\"")[1].split("\"")[0].encode('raw_unicode_escape').decode('unicode_escape'),
         r'<[a-zA-Z0-9]+:ComboboxCard' + MAIN_WILDCARD + r'+Text=["\'].+["\']' + MAIN_WILDCARD + r'*\/?>': lambda match: match.split(" Text=\"")[1].split("\"")[0].encode('raw_unicode_escape').decode('unicode_escape'),
         r'<[a-zA-Z0-9]+:BetterMenuItem' + MAIN_WILDCARD + r'+Text=["\'].+["\']' + MAIN_WILDCARD + r'*\/?>': lambda match: match.split(" Text=\"")[1].split("\"")[0].encode('raw_unicode_escape').decode('unicode_escape'),
         r'<[a-zA-Z0-9]+:NavButton' + MAIN_WILDCARD + r'+Text=["\'].+["\']' + MAIN_WILDCARD + r'*\/?>': lambda match: match.split(" Text=\"")[1].split("\"")[0].encode('raw_unicode_escape').decode('unicode_escape'),
@@ -69,7 +71,11 @@ def get_all_strings():
                 with open(os.path.join(dirpath, file), "r", encoding="utf-8") as f:
                     matches: list[str] = re.findall(regex, f.read())
                     for match in matches:
-                        translation_strings.append(regex_data[regex](match.replace("\n", " ").replace("\t", " ")))
+                        try:
+                            translation_strings.append(regex_data[regex](match.replace("\n", " ").replace("\t", " ")))
+                        except Exception as e:
+                            print(match)
+                            raise e
 
     translation_strings = list(set(translation_strings))  # uniq
     translation_strings.sort(key=lambda x: (remove_special_chars(x.lower()), x))

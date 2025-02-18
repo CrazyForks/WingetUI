@@ -1,0 +1,54 @@
+name: .NET Tests
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - '**.cs'
+      - '**.csproj'
+      - '**.sln'
+      - '.github/workflows/dotnet-test.yml'
+
+  pull_request:
+    branches: [ "main" ]
+    paths:
+      - '**.cs'
+      - '**.csproj'
+      - '**.sln'
+      - '.github/workflows/dotnet-test.yml'
+
+  workflow_dispatch:
+
+jobs:
+  test-codebase:
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout the repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    # Install the .NET Core workload
+    - name: Install .NET Core
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 8.0.x
+
+    # - name: Install WinGet
+    #   uses: Cyberboss/install-winget@v1
+
+    - name: Install dependencies
+      working-directory: src
+      run: dotnet restore
+
+    - name: Build
+      working-directory: src
+      run: dotnet build --configuration Release --no-restore
+
+    - name: Run Tests
+      working-directory: src
+      run: dotnet test --no-restore --verbosity q --nologo
+
+    - name: Test publish
+      working-directory: src
+      run: dotnet publish --configuration Release --no-restore
