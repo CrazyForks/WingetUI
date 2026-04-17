@@ -505,12 +505,29 @@ namespace UniGetUI.Core.Tools
             {
                 _isCaching = true;
                 Logger.Info("Caching admin rights for process id " + Environment.ProcessId);
+
+                var elevatorName = Path.GetFileName(CoreData.ElevatorPath);
+
+                // pkexec prompts on every invocation and has no caching protocol.
+                if (elevatorName == "pkexec")
+                {
+                    _isCaching = false;
+                    return;
+                }
+
+                // sudo: -v validates/extends the cached timestamp.
+                // Prepend -A only when the SUDO_ASKPASS helper is configured.
+                // gsudo / UniGetUI Elevator.exe: use the gsudo cache protocol.
+                string cacheArgs = elevatorName == "sudo"
+                    ? (CoreData.ElevatorArgs.Contains("-A") ? "-Av" : "-v")
+                    : "cache on --pid " + Environment.ProcessId + " -d 1";
+
                 using Process p = new()
                 {
                     StartInfo = new ProcessStartInfo
                     {
                         FileName = CoreData.ElevatorPath,
-                        Arguments = "cache on --pid " + Environment.ProcessId + " -d 1",
+                        Arguments = cacheArgs,
                         UseShellExecute = false,
                         RedirectStandardOutput = true,
                         RedirectStandardError = true,
@@ -546,12 +563,27 @@ namespace UniGetUI.Core.Tools
             Logger.Info(
                 "Resetting administrator rights cache for process id " + Environment.ProcessId
             );
+
+            var elevatorName = Path.GetFileName(CoreData.ElevatorPath);
+
+            // pkexec prompts on every invocation and has no caching protocol.
+            if (elevatorName == "pkexec")
+            {
+                return;
+            }
+
+            // sudo: -K removes all cached timestamps.
+            // gsudo / UniGetUI Elevator.exe: use the gsudo cache protocol.
+            string resetArgs = elevatorName == "sudo"
+                ? "-K"
+                : "cache off --pid " + Environment.ProcessId;
+
             using Process p = new()
             {
                 StartInfo = new ProcessStartInfo
                 {
                     FileName = CoreData.ElevatorPath,
-                    Arguments = "cache off --pid " + Environment.ProcessId,
+                    Arguments = resetArgs,
                     UseShellExecute = false,
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
