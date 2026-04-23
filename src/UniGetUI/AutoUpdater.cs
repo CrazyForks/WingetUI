@@ -512,7 +512,7 @@ public partial class AutoUpdater
             {
                 FileName = installerLocation,
                 Arguments =
-                    "/SILENT /SUPPRESSMSGBOXES /NORESTART /SP- /NoVCRedist /NoEdgeWebView /NoWinGet /NoChocolatey",
+                    "/SILENT /SUPPRESSMSGBOXES /NORESTART /SP- /NoVCRedist /NoEdgeWebView /NoWinGet",
                 UseShellExecute = true,
                 CreateNoWindow = true,
             },
