@@ -10,22 +10,16 @@ namespace UniGetUI.PackageEngine.Managers.HomebrewManager;
 
 internal sealed class HomebrewPkgDetailsHelper : BasePkgDetailsHelper
 {
+    private readonly Homebrew _brew;
+
     public HomebrewPkgDetailsHelper(Homebrew manager)
-        : base(manager) { }
+        : base(manager) { _brew = manager; }
 
     protected override void GetDetails_UnSafe(IPackageDetails details)
     {
         using var p = new Process
         {
-            StartInfo = new ProcessStartInfo
-            {
-                FileName = Manager.Status.ExecutablePath,
-                Arguments = $"info --json=v2 {details.Package.Id}",
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                CreateNoWindow = true,
-            },
+            StartInfo = _brew.MakeBrewStartInfo($"info --json=v2 {details.Package.Id}"),
         };
 
         IProcessTaskLogger logger = Manager.TaskLogger.CreateNew(
