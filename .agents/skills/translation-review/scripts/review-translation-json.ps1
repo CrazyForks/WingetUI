@@ -23,11 +23,11 @@ $repoRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\..\..'
 . (Join-Path $repoRoot 'scripts\translation\Languages\TranslationJsonTools.ps1')
 
 function Get-TranslationReviewLanguageReferencePath {
-    return Join-Path $repoRoot 'src\UniGetUI.Core.LanguageEngine\Assets\Data\LanguagesReference.json'
+    return Join-Path $repoRoot 'src\Languages\Data\LanguagesReference.json'
 }
 
 function Get-TranslationReviewLanguagesDirectory {
-    return Join-Path $repoRoot 'src\UniGetUI.Core.LanguageEngine\Assets\Languages'
+    return Join-Path $repoRoot 'src\Languages'
 }
 
 function Get-TranslationReviewLanguageReference {

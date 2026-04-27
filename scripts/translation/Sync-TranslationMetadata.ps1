@@ -16,9 +16,9 @@ param(
 
     [string]$TranslationDocPath = (Join-Path $PSScriptRoot '..\..\TRANSLATION.md'),
 
-    [string]$TranslatorsPath = (Join-Path $PSScriptRoot '..\..\src\UniGetUI.Core.LanguageEngine\Assets\Data\Translators.json'),
+    [string]$TranslatorsPath = (Join-Path $PSScriptRoot '..\..\src\Languages\Data\Translators.json'),
 
-    [string]$TranslatedPercentagesPath = (Join-Path $PSScriptRoot '..\..\src\UniGetUI.Core.LanguageEngine\Assets\Data\TranslatedPercentages.json')
+    [string]$TranslatedPercentagesPath = (Join-Path $PSScriptRoot '..\..\src\Languages\Data\TranslatedPercentages.json')
 )
 
 Set-StrictMode -Version Latest
@@ -212,11 +212,7 @@ function Get-ExpectedTranslatorMetadata {
     }
 
     $englishLanguageMap = Read-OrderedJsonMap -Path $englishLanguageFilePath
-    if (-not $englishLanguageMap.Contains($script:TranslatorCreditsKey)) {
-        throw "Translator credits entry was not found in $englishLanguageFilePath"
-    }
-
-    $englishCreditsSignature = Get-TranslatorCreditsSignature -Credits ([string]$englishLanguageMap[$script:TranslatorCreditsKey])
+    $hasCreditsKey = $englishLanguageMap.Contains($script:TranslatorCreditsKey)
 
     foreach ($code in $CodesToUpdate) {
         $languageFilePath = Join-Path $languagesDirectory ("lang_{0}.json" -f $code)
@@ -225,10 +221,14 @@ function Get-ExpectedTranslatorMetadata {
         }
 
         $languageMap = Read-OrderedJsonMap -Path $languageFilePath
-        if (-not $languageMap.Contains($script:TranslatorCreditsKey)) {
-            throw "Translator credits entry was not found in $languageFilePath"
+        if (-not $hasCreditsKey -or -not $languageMap.Contains($script:TranslatorCreditsKey)) {
+            if (-not $updatedTranslators.Contains($code)) {
+                $updatedTranslators[$code] = @()
+            }
+            continue
         }
 
+        $englishCreditsSignature = Get-TranslatorCreditsSignature -Credits ([string]$englishLanguageMap[$script:TranslatorCreditsKey])
         $credits = [string]$languageMap[$script:TranslatorCreditsKey]
         $creditsSignature = Get-TranslatorCreditsSignature -Credits $credits
         $shouldPreserveExisting = $code -ne 'en' -and $creditsSignature -eq $englishCreditsSignature
