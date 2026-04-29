@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Input.Platform;
 using Avalonia.Layout;
 using Avalonia.Media;
+using UniGetUI.Avalonia.Infrastructure;
 using UniGetUI.Avalonia.ViewModels;
 using UniGetUI.Avalonia.ViewModels.Pages.SettingsPages;
 using UniGetUI.Avalonia.Views.Controls;
@@ -236,7 +237,7 @@ public sealed partial class PackageManagerPage : UserControl, ISettingsPage
         var customAgeInput = new TextBox
         {
             MinWidth = 200,
-            Watermark = CoreTools.Translate("e.g. 10"),
+            PlaceholderText = CoreTools.Translate("e.g. 10"),
             [AutomationProperties.NameProperty] = CoreTools.Translate("Custom minimum age (days)"),
             Text = CoreSettings.GetDictionaryItem<string, string>(
                 CoreSettings.K.PerManagerMinimumUpdateAgeCustom, manager.Name) ?? "",
@@ -366,7 +367,7 @@ public sealed partial class PackageManagerPage : UserControl, ISettingsPage
                     ButtonText = CoreTools.AutoTranslated("Reset"),
                     CornerRadius = new CornerRadius(0),
                 };
-                wingetResetBtn.Click += (_, _) => { /* TODO: HandleBrokenWinGet */ };
+                wingetResetBtn.Click += (_, _) => _ = AvaloniaPackageOperationHelper.HandleBrokenWinGetAsync();
                 ExtraControls.Children.Add(wingetResetBtn);
 
                 ExtraControls.Children.Add(new CheckboxCard
