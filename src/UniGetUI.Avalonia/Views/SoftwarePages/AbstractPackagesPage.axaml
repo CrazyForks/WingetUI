@@ -248,19 +248,15 @@
 
         </Grid>
 
-        <!-- ==================== MAIN CONTENT (SplitView: filter pane + package list) ==================== -->
-        <SplitView x:Name="FilteringPanel"
-                   Grid.Row="2"
-                   DisplayMode="Inline"
-                   PanePlacement="Left"
-                   IsPaneOpen="{Binding IsFilterPaneOpen, Mode=TwoWay}"
-                   OpenPaneLength="220"
-                   BorderThickness="0"
-                   Background="{DynamicResource AppWindowBackground}">
+        <!-- ==================== MAIN CONTENT (filter pane + package list) ==================== -->
+        <Grid x:Name="FilteringPanel"
+              Grid.Row="2"
+              ColumnDefinitions="220,4,*">
 
             <!-- ===== FILTER PANE ===== -->
-            <SplitView.Pane>
                 <ScrollViewer x:Name="SidePanel"
+                              Grid.Column="0"
+                              IsVisible="{Binding IsFilterPaneOpen}"
                               HorizontalScrollBarVisibility="Disabled"
                               Padding="0,0,4,0"
                               automation:AutomationProperties.AccessibilityView="Control"
@@ -329,8 +325,21 @@
                                               ItemsSource="{Binding SourceNodes}">
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate x:DataType="vm:SourceTreeNode">
-                                                <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay}"
-                                                          Content="{Binding PackageName}"/>
+                                                <StackPanel>
+                                                    <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                                                              Content="{Binding PackageName}"/>
+                                                    <!-- Child sources, indented, shown when manager has custom sources -->
+                                                    <ItemsControl ItemsSource="{Binding Children}"
+                                                                  Margin="20,0,0,0">
+                                                        <ItemsControl.ItemTemplate>
+                                                            <DataTemplate x:DataType="vm:SourceTreeNode">
+                                                                <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                                                                          Content="{Binding PackageName}"
+                                                                          FontSize="12"/>
+                                                            </DataTemplate>
+                                                        </ItemsControl.ItemTemplate>
+                                                    </ItemsControl>
+                                                </StackPanel>
                                             </DataTemplate>
                                         </ItemsControl.ItemTemplate>
                                     </ItemsControl>
@@ -420,10 +429,25 @@
 
                     </StackPanel>
                 </ScrollViewer>
-            </SplitView.Pane>
+            <!-- ===== DRAG SPLITTER ===== -->
+            <GridSplitter x:Name="FilterSplitter"
+                          Grid.Column="1"
+                          IsVisible="{Binding IsFilterPaneOpen}"
+                          HorizontalAlignment="Stretch"
+                          ResizeDirection="Columns"
+                          Background="{DynamicResource AppWindowBackground}"/>
+
+            <!-- ===== OVERLAY BACKDROP (overlay mode only, dismisses pane on click) ===== -->
+            <Border x:Name="FilterOverlayBackdrop"
+                    Grid.Column="0"
+                    Grid.ColumnSpan="3"
+                    ZIndex="9"
+                    Background="#60000000"
+                    IsVisible="False"
+                    IsHitTestVisible="True"/>
 
             <!-- ===== PACKAGE LIST ===== -->
-            <Grid x:Name="PackagesListGrid" Margin="0">
+            <Grid x:Name="PackagesListGrid" Grid.Column="2" Margin="0">
 
                 <!-- Loading indicator -->
                 <ProgressBar x:Name="LoadingProgressBar"
@@ -490,8 +514,17 @@
                                             <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" Margin="4,0"
                                                         automation:AutomationProperties.Name="{Binding Package.AutomationName}"
                                                         automation:AutomationProperties.ItemType="{t:Translate Package}">
-                                                <controls:SvgIcon Path="avares://UniGetUI.Avalonia/Assets/Symbols/package.svg"
-                                                                  Width="16" Height="16" VerticalAlignment="Center"/>
+                                                <Panel Width="16" Height="16" VerticalAlignment="Center">
+                                                    <Image Source="{Binding IconBitmap}" Width="16" Height="16"
+                                                           Stretch="Uniform" IsVisible="{Binding HasCustomIcon}"/>
+                                                    <controls:SvgIcon Path="avares://UniGetUI.Avalonia/Assets/Symbols/package.svg"
+                                                                      Width="16" Height="16" IsVisible="{Binding !HasCustomIcon}"/>
+                                                    <controls:SvgIcon Path="{Binding TagIconPath}"
+                                                                      Width="8" Height="8"
+                                                                      IsVisible="{Binding TagIconVisible}"
+                                                                      HorizontalAlignment="Right"
+                                                                      VerticalAlignment="Bottom"/>
+                                                </Panel>
                                                 <TextBlock Text="{Binding Package.Name}" VerticalAlignment="Center"/>
                                             </StackPanel>
                                         </DataTemplate>
@@ -578,12 +611,19 @@
                                             automation:AutomationProperties.Name="{Binding Package.AutomationName}"
                                             automation:AutomationProperties.ItemType="{t:Translate Package}"
                                                 Background="{DynamicResource AppBorderBrush}" Padding="4">
-                                            <Grid ColumnDefinitions="48,*,24" ColumnSpacing="4">
-                                                <controls:SvgIcon Grid.Column="0"
-                                                                  Path="avares://UniGetUI.Avalonia/Assets/Symbols/package.svg"
-                                                                  Width="36" Height="36"
-                                                                  VerticalAlignment="Center"
-                                                                  HorizontalAlignment="Center"/>
+                                            <Grid ColumnDefinitions="48,*,28" ColumnSpacing="4">
+                                                <Panel Grid.Column="0" Width="36" Height="36"
+                                                       VerticalAlignment="Center" HorizontalAlignment="Center">
+                                                    <Image Source="{Binding IconBitmap}" Width="36" Height="36"
+                                                           Stretch="Uniform" IsVisible="{Binding HasCustomIcon}"/>
+                                                    <controls:SvgIcon Path="avares://UniGetUI.Avalonia/Assets/Symbols/package.svg"
+                                                                      Width="36" Height="36" IsVisible="{Binding !HasCustomIcon}"/>
+                                                    <controls:SvgIcon Path="{Binding TagIconPath}"
+                                                                      Width="14" Height="14"
+                                                                      IsVisible="{Binding TagIconVisible}"
+                                                                      HorizontalAlignment="Right"
+                                                                      VerticalAlignment="Bottom"/>
+                                                </Panel>
                                                 <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
                                                     <TextBlock Text="{Binding Package.Name}"
                                                                FontWeight="SemiBold" FontSize="13"
@@ -595,11 +635,21 @@
                                                                FontSize="11" Opacity="0.5"
                                                                TextTrimming="CharacterEllipsis"/>
                                                 </StackPanel>
-                                                <CheckBox Grid.Column="2"
-                                                          IsChecked="{Binding IsChecked, Mode=TwoWay}"
-                                                          automation:AutomationProperties.Name="{Binding Package.AutomationName}"
-                                                          VerticalAlignment="Center"
-                                                          HorizontalAlignment="Center"/>
+                                                <!-- Col 2: checkbox (top) + overflow button (bottom) -->
+                                                <Panel Grid.Column="2">
+                                                    <CheckBox IsChecked="{Binding IsChecked, Mode=TwoWay}"
+                                                              automation:AutomationProperties.Name="{Binding Package.AutomationName}"
+                                                              VerticalAlignment="Top"
+                                                              HorizontalAlignment="Center"/>
+                                                    <Button Click="CardOverflowButton_Click"
+                                                            Width="22" Height="22" Padding="0"
+                                                            VerticalAlignment="Bottom"
+                                                            HorizontalAlignment="Center"
+                                                            Background="Transparent" BorderThickness="0"
+                                                            automation:AutomationProperties.Name="{t:Translate More options}">
+                                                        <TextBlock Text="···" FontSize="16" VerticalAlignment="Center"/>
+                                                    </Button>
+                                                </Panel>
                                             </Grid>
                                         </Border>
                                     </DataTemplate>
@@ -629,11 +679,27 @@
                                                           HorizontalAlignment="Left"
                                                           VerticalAlignment="Top"
                                                           Padding="0" Margin="-4,0,0,0"/>
-                                                <controls:SvgIcon Grid.Row="1"
-                                                                  Path="avares://UniGetUI.Avalonia/Assets/Symbols/package.svg"
-                                                                  Width="48" Height="48"
-                                                                  VerticalAlignment="Center"
-                                                                  HorizontalAlignment="Center"/>
+                                                <Button Grid.Row="0"
+                                                        Click="CardOverflowButton_Click"
+                                                        Width="22" Height="22" Padding="0"
+                                                        HorizontalAlignment="Right"
+                                                        VerticalAlignment="Top"
+                                                        Background="Transparent" BorderThickness="0"
+                                                        automation:AutomationProperties.Name="{t:Translate More options}">
+                                                    <TextBlock Text="···" FontSize="16" VerticalAlignment="Center"/>
+                                                </Button>
+                                                <Panel Grid.Row="1" Width="48" Height="48"
+                                                       VerticalAlignment="Center" HorizontalAlignment="Center">
+                                                    <Image Source="{Binding IconBitmap}" Width="48" Height="48"
+                                                           Stretch="Uniform" IsVisible="{Binding HasCustomIcon}"/>
+                                                    <controls:SvgIcon Path="avares://UniGetUI.Avalonia/Assets/Symbols/package.svg"
+                                                                      Width="48" Height="48" IsVisible="{Binding !HasCustomIcon}"/>
+                                                    <controls:SvgIcon Path="{Binding TagIconPath}"
+                                                                      Width="18" Height="18"
+                                                                      IsVisible="{Binding TagIconVisible}"
+                                                                      HorizontalAlignment="Right"
+                                                                      VerticalAlignment="Bottom"/>
+                                                </Panel>
                                                 <TextBlock Grid.Row="2"
                                                            Text="{Binding Package.Name}"
                                                            FontWeight="SemiBold" FontSize="12"
@@ -698,7 +764,7 @@
                 </Grid>
 
             </Grid>
-        </SplitView>
+        </Grid>
 
     </Grid>
 </UserControl>

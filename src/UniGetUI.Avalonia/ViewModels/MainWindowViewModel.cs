@@ -64,6 +64,24 @@ public partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty]
     private bool _operationsPanelVisible;
 
+    [ObservableProperty]
+    private bool _operationsPanelExpanded = true;
+
+    [RelayCommand]
+    private void ToggleOperationsPanel() => OperationsPanelExpanded = !OperationsPanelExpanded;
+
+    [RelayCommand]
+    private void RetryFailedOperations() => AvaloniaOperationRegistry.RetryFailed();
+
+    [RelayCommand]
+    private void ClearSuccessfulOperations() => AvaloniaOperationRegistry.ClearSuccessful();
+
+    [RelayCommand]
+    private void ClearFinishedOperations() => AvaloniaOperationRegistry.ClearFinished();
+
+    [RelayCommand]
+    private void CancelAllOperations() => AvaloniaOperationRegistry.CancelAll();
+
     // ─── Sidebar ─────────────────────────────────────────────────────────────
     public SidebarViewModel Sidebar { get; } = new();
 
