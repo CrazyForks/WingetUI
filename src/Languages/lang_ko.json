@@ -66,6 +66,8 @@
   "Version to install:": "설치할 버전:",
   "Architecture to install:": "설치할 아키텍처:",
   "Installation scope:": "설치 범위:",
+  "User | Local": "사용자 | 로컬",
+  "Machine | Global": "머신 | 전역",    
   "Install location:": "설치 위치:",
   "Select": "선택",
   "Reset": "초기화",
