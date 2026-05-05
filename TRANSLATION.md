@@ -108,7 +108,7 @@ We are grateful to everyone who contributes translations to UniGetUI. Contributo
 | <img src='https://flagcdn.com/jp.svg' width=20> &nbsp; Japanese - 日本語 | `ja` | [anmoti](https://github.com/anmoti), [BHCrusher1](https://github.com/BHCrusher1), [nob-swik](https://github.com/nob-swik), Nobuhiro Shintaku, sho9029, [tacostea](https://github.com/tacostea), Yuki Takase |
 | <img src='https://flagcdn.com/ge.svg' width=20> &nbsp; Georgian - ქართული | `ka` | [marticliment](https://github.com/marticliment), [ppvnf](https://github.com/ppvnf) |
 | <img src='https://flagcdn.com/in.svg' width=20> &nbsp; Kannada - ಕನ್ನಡ | `kn` | [skanda890](https://github.com/skanda890) |
-| <img src='https://flagcdn.com/kr.svg' width=20> &nbsp; Korean - 한국어 | `ko` | [jihoon416](https://github.com/jihoon416), [minbert](https://github.com/minbert), [MuscularPuky](https://github.com/MuscularPuky), [shblue21](https://github.com/shblue21), [thejjw](https://github.com/thejjw), [VenusGirl](https://github.com/VenusGirl) |
+| <img src='https://flagcdn.com/kr.svg' width=20> &nbsp; Korean - 한국어 | `ko` | [VenusGirl](https://github.com/VenusGirl) |
 | <img src='https://flagcdn.com/iq.svg' width=20> &nbsp; Kurdish - کوردی | `ku` |  |
 | <img src='https://flagcdn.com/lt.svg' width=20> &nbsp; Lithuanian - Lietuvių | `lt` | Džiugas Januševičius, [dziugas1959](https://github.com/dziugas1959), [martyn3z](https://github.com/martyn3z) |
 | <img src='https://flagcdn.com/mk.svg' width=20> &nbsp; Macedonian - Македонски | `mk` | LordDeatHunter |
