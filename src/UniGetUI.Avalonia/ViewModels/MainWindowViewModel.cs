@@ -187,6 +187,7 @@ public partial class MainWindowViewModel : ViewModelBase
 
         AvaloniaAutoUpdater.UpdateAvailable += version => Dispatcher.UIThread.Post(() =>
         {
+            UpdatesBanner.Severity = InfoBarSeverity.Success;
             UpdatesBanner.Title = CoreTools.Translate("UniGetUI {0} is ready to be installed.", version);
             UpdatesBanner.Message = CoreTools.Translate("The update process will start after closing UniGetUI");
             UpdatesBanner.ActionButtonText = CoreTools.Translate("Update now");
@@ -194,6 +195,24 @@ public partial class MainWindowViewModel : ViewModelBase
             UpdatesBanner.IsClosable = true;
             UpdatesBanner.IsOpen = true;
         });
+
+        AvaloniaAutoUpdater.StatusChanged += status => Dispatcher.UIThread.Post(() =>
+        {
+            UpdatesBanner.Severity = status.Severity;
+            UpdatesBanner.Title = status.Title;
+            UpdatesBanner.Message = status.Message;
+            UpdatesBanner.ActionButtonText = status.ActionButtonText ?? "";
+            UpdatesBanner.ActionButtonCommand = status.ActionButtonAction is { } action
+                ? new CommunityToolkit.Mvvm.Input.RelayCommand(action)
+                : null;
+            UpdatesBanner.IsClosable = status.IsClosable;
+            UpdatesBanner.IsOpen = true;
+        });
+
+        // If the previous update attempt was killed mid-flow (typically by the
+        // installer terminating us during file replacement), surface a banner now
+        // that subscriptions are wired up.
+        AvaloniaAutoUpdater.CheckForOrphanedUpdateAttempt();
 
         // Keep OperationsPanelVisible in sync with the live operations list
         Operations.CollectionChanged += (_, _) =>
