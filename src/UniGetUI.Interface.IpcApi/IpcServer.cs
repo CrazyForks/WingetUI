@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using System.Text.Json;
 using Microsoft.AspNetCore.Builder;
@@ -23,6 +24,10 @@ namespace UniGetUI.Interface
         public static string Token = "";
     }
 
+    [UnconditionalSuppressMessage(
+        "Trimming",
+        "IL2026",
+        Justification = "IPC JSON metadata is supplied by IpcJsonContext; remaining ASP.NET Core JSON overload warnings are guarded by that generated resolver.")]
     public class IpcServer
     {
         public string SessionId { get; } = Guid.NewGuid().ToString("N");
@@ -56,233 +61,228 @@ namespace UniGetUI.Interface
             ApiTokenHolder.Token = CoreTools.RandomString(64);
             Logger.Info("Generated a IPC API auth token for the current session");
 
-            var builder = Host.CreateDefaultBuilder();
-            builder.ConfigureServices(services => services.AddCors());
-            builder.ConfigureWebHostDefaults(webBuilder =>
+            var builder = WebApplication.CreateSlimBuilder(new WebApplicationOptions
             {
-                webBuilder.UseKestrel(serverOptions => ConfigureTransport(serverOptions));
-#if !DEBUG
-                webBuilder.SuppressStatusMessages(true);
-#endif
-                webBuilder.Configure(app =>
-                {
-                    app.UseCors(policy =>
-                        policy.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader()
-                    );
-
-                    app.UseRouting();
-                    app.UseEndpoints(endpoints =>
-                    {
-                        endpoints.MapGet(IpcHttpRoutes.Path("/status"), V3_Status);
-                        endpoints.MapGet(IpcHttpRoutes.Path("/app"), V3_GetAppInfo);
-                        endpoints.MapPost(IpcHttpRoutes.Path("/app/show"), V3_ShowApp);
-                        endpoints.MapPost(IpcHttpRoutes.Path("/app/navigate"), V3_NavigateApp);
-                        endpoints.MapPost(IpcHttpRoutes.Path("/app/quit"), V3_QuitApp);
-                        endpoints.MapGet(IpcHttpRoutes.Path("/operations"), V3_ListOperations);
-                        endpoints.MapGet(
-                            IpcHttpRoutes.Path("/operations/{operationId}"),
-                            V3_GetOperation
-                        );
-                        endpoints.MapGet(
-                            IpcHttpRoutes.Path("/operations/{operationId}/output"),
-                            V3_GetOperationOutput
-                        );
-                        endpoints.MapPost(
-                            IpcHttpRoutes.Path("/operations/{operationId}/cancel"),
-                            V3_CancelOperation
-                        );
-                        endpoints.MapPost(
-                            IpcHttpRoutes.Path("/operations/{operationId}/retry"),
-                            V3_RetryOperation
-                        );
-                        endpoints.MapPost(
-                            IpcHttpRoutes.Path("/operations/{operationId}/reorder"),
-                            V3_ReorderOperation
-                        );
-                        endpoints.MapPost(
-                            IpcHttpRoutes.Path("/operations/{operationId}/forget"),
-                            V3_ForgetOperation
-                        );
-                        endpoints.MapGet(IpcHttpRoutes.Path("/managers"), V3_ListManagers);
-                        endpoints.MapGet(
-                            IpcHttpRoutes.Path("/managers/maintenance"),
-                            V3_GetManagerMaintenance
-                        );
-                        endpoints.MapPost(
-                            IpcHttpRoutes.Path("/managers/maintenance/reload"),
-                            V3_ReloadManager
-                        );
-                        endpoints.MapPost(
-                            IpcHttpRoutes.Path("/managers/maintenance/executable/set"),
-                            V3_SetManagerExecutable
-                        );
-                        endpoints.MapPost(
-                            IpcHttpRoutes.Path("/managers/maintenance/executable/clear"),
-                            V3_ClearManagerExecutable
-                        );
-                        endpoints.MapPost(
-                            IpcHttpRoutes.Path("/managers/maintenance/action"),
-                            V3_RunManagerAction
-                        );
-                        endpoints.MapGet(IpcHttpRoutes.Path("/sources"), V3_ListSources);
-                        endpoints.MapPost(IpcHttpRoutes.Path("/sources/add"), V3_AddSource);
-                        endpoints.MapPost(IpcHttpRoutes.Path("/sources/remove"), V3_RemoveSource);
-                        endpoints.MapGet(IpcHttpRoutes.Path("/settings"), V3_ListSettings);
-                        endpoints.MapGet(IpcHttpRoutes.Path("/settings/item"), V3_GetSetting);
-                        endpoints.MapPost(IpcHttpRoutes.Path("/settings/set"), V3_SetSetting);
-                        endpoints.MapPost(IpcHttpRoutes.Path("/settings/clear"), V3_ClearSetting);
-                        endpoints.MapPost(IpcHttpRoutes.Path("/settings/reset"), V3_ResetSettings);
-                        endpoints.MapGet(
-                            IpcHttpRoutes.Path("/secure-settings"),
-                            V3_ListSecureSettings
-                        );
-                        endpoints.MapGet(
-                            IpcHttpRoutes.Path("/secure-settings/item"),
-                            V3_GetSecureSetting
-                        );
-                        endpoints.MapPost(
-                            IpcHttpRoutes.Path("/secure-settings/set"),
-                            V3_SetSecureSetting
-                        );
-                        endpoints.MapPost(
-                            IpcHttpRoutes.Path("/managers/set-enabled"),
-                            V3_SetManagerEnabled
-                        );
-                        endpoints.MapPost(
-                            IpcHttpRoutes.Path("/managers/set-update-notifications"),
-                            V3_SetManagerUpdateNotifications
-                        );
-                        endpoints.MapGet(
-                            IpcHttpRoutes.Path("/desktop-shortcuts"),
-                            V3_ListDesktopShortcuts
-                        );
-                        endpoints.MapPost(
-                            IpcHttpRoutes.Path("/desktop-shortcuts/set"),
-                            V3_SetDesktopShortcut
-                        );
-                        endpoints.MapPost(
-                            IpcHttpRoutes.Path("/desktop-shortcuts/reset"),
-                            V3_ResetDesktopShortcut
-                        );
-                        endpoints.MapPost(
-                            IpcHttpRoutes.Path("/desktop-shortcuts/reset-all"),
-                            V3_ResetDesktopShortcuts
-                        );
-                        endpoints.MapGet(IpcHttpRoutes.Path("/logs/app"), V3_GetAppLog);
-                        endpoints.MapGet(
-                            IpcHttpRoutes.Path("/logs/history"),
-                            V3_GetOperationHistory
-                        );
-                        endpoints.MapGet(IpcHttpRoutes.Path("/logs/manager"), V3_GetManagerLog);
-                        endpoints.MapGet(IpcHttpRoutes.Path("/backups/status"), V3_GetBackupStatus);
-                        endpoints.MapPost(
-                            IpcHttpRoutes.Path("/backups/local/create"),
-                            V3_CreateLocalBackup
-                        );
-                        endpoints.MapPost(
-                            IpcHttpRoutes.Path("/backups/github/sign-in/start"),
-                            V3_StartGitHubDeviceFlow
-                        );
-                        endpoints.MapPost(
-                            IpcHttpRoutes.Path("/backups/github/sign-in/complete"),
-                            V3_CompleteGitHubDeviceFlow
-                        );
-                        endpoints.MapPost(
-                            IpcHttpRoutes.Path("/backups/github/sign-out"),
-                            V3_SignOutGitHub
-                        );
-                        endpoints.MapGet(
-                            IpcHttpRoutes.Path("/backups/cloud"),
-                            V3_ListCloudBackups
-                        );
-                        endpoints.MapPost(
-                            IpcHttpRoutes.Path("/backups/cloud/create"),
-                            V3_CreateCloudBackup
-                        );
-                        endpoints.MapPost(
-                            IpcHttpRoutes.Path("/backups/cloud/download"),
-                            V3_DownloadCloudBackup
-                        );
-                        endpoints.MapPost(
-                            IpcHttpRoutes.Path("/backups/cloud/restore"),
-                            V3_RestoreCloudBackup
-                        );
-                        endpoints.MapGet(IpcHttpRoutes.Path("/bundles"), V3_GetBundle);
-                        endpoints.MapPost(IpcHttpRoutes.Path("/bundles/reset"), V3_ResetBundle);
-                        endpoints.MapPost(IpcHttpRoutes.Path("/bundles/import"), V3_ImportBundle);
-                        endpoints.MapPost(IpcHttpRoutes.Path("/bundles/export"), V3_ExportBundle);
-                        endpoints.MapPost(IpcHttpRoutes.Path("/bundles/add"), V3_AddBundlePackage);
-                        endpoints.MapPost(
-                            IpcHttpRoutes.Path("/bundles/remove"),
-                            V3_RemoveBundlePackage
-                        );
-                        endpoints.MapPost(
-                            IpcHttpRoutes.Path("/bundles/install"),
-                            V3_InstallBundle
-                        );
-                        endpoints.MapGet(
-                            IpcHttpRoutes.Path("/packages/search"),
-                            V3_SearchPackages
-                        );
-                        endpoints.MapGet(
-                            IpcHttpRoutes.Path("/packages/installed"),
-                            V3_ListInstalledPackages
-                        );
-                        endpoints.MapGet(
-                            IpcHttpRoutes.Path("/packages/updates"),
-                            V3_ListUpgradablePackages
-                        );
-                        endpoints.MapGet(
-                            IpcHttpRoutes.Path("/packages/details"),
-                            V3_GetPackageDetails
-                        );
-                        endpoints.MapGet(
-                            IpcHttpRoutes.Path("/packages/versions"),
-                            V3_GetPackageVersions
-                        );
-                        endpoints.MapGet(
-                            IpcHttpRoutes.Path("/packages/ignored"),
-                            V3_ListIgnoredUpdates
-                        );
-                        endpoints.MapPost(IpcHttpRoutes.Path("/packages/ignore"), V3_IgnorePackage);
-                        endpoints.MapPost(
-                            IpcHttpRoutes.Path("/packages/unignore"),
-                            V3_UnignorePackage
-                        );
-                        endpoints.MapPost(
-                            IpcHttpRoutes.Path("/packages/download"),
-                            V3_DownloadPackage
-                        );
-                        endpoints.MapPost(
-                            IpcHttpRoutes.Path("/packages/install"),
-                            V3_InstallPackage
-                        );
-                        endpoints.MapPost(
-                            IpcHttpRoutes.Path("/packages/reinstall"),
-                            V3_ReinstallPackage
-                        );
-                        endpoints.MapPost(IpcHttpRoutes.Path("/packages/update"), V3_UpdatePackage);
-                        endpoints.MapPost(
-                            IpcHttpRoutes.Path("/packages/uninstall"),
-                            V3_UninstallPackage
-                        );
-                        endpoints.MapPost(
-                            IpcHttpRoutes.Path("/packages/uninstall-then-reinstall"),
-                            V3_UninstallThenReinstallPackage
-                        );
-                        endpoints.MapPost(IpcHttpRoutes.Path("/packages/show"), V3_ShowPackage);
-                        endpoints.MapPost(
-                            IpcHttpRoutes.Path("/packages/update-all"),
-                            V3_UpdateAllPackages
-                        );
-                        endpoints.MapPost(
-                            IpcHttpRoutes.Path("/packages/update-manager"),
-                            V3_UpdateAllPackagesForManager
-                        );
-                    });
-                });
+                Args = [],
+                ApplicationName = typeof(IpcServer).Assembly.FullName,
             });
-            _host = builder.Build();
+            builder.Services.AddCors();
+            builder.WebHost.UseKestrel(ConfigureTransport);
+#if !DEBUG
+            builder.WebHost.UseSetting(WebHostDefaults.SuppressStatusMessagesKey, "true");
+#endif
+            var app = builder.Build();
+            app.UseCors(policy =>
+                policy.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader()
+            );
+            var endpoints = app;
+            endpoints.MapGet(IpcHttpRoutes.Path("/status"), V3_Status);
+            endpoints.MapGet(IpcHttpRoutes.Path("/app"), V3_GetAppInfo);
+            endpoints.MapPost(IpcHttpRoutes.Path("/app/show"), V3_ShowApp);
+            endpoints.MapPost(IpcHttpRoutes.Path("/app/navigate"), V3_NavigateApp);
+            endpoints.MapPost(IpcHttpRoutes.Path("/app/quit"), V3_QuitApp);
+            endpoints.MapGet(IpcHttpRoutes.Path("/operations"), V3_ListOperations);
+            endpoints.MapGet(
+                IpcHttpRoutes.Path("/operations/{operationId}"),
+                V3_GetOperation
+            );
+            endpoints.MapGet(
+                IpcHttpRoutes.Path("/operations/{operationId}/output"),
+                V3_GetOperationOutput
+            );
+            endpoints.MapPost(
+                IpcHttpRoutes.Path("/operations/{operationId}/cancel"),
+                V3_CancelOperation
+            );
+            endpoints.MapPost(
+                IpcHttpRoutes.Path("/operations/{operationId}/retry"),
+                V3_RetryOperation
+            );
+            endpoints.MapPost(
+                IpcHttpRoutes.Path("/operations/{operationId}/reorder"),
+                V3_ReorderOperation
+            );
+            endpoints.MapPost(
+                IpcHttpRoutes.Path("/operations/{operationId}/forget"),
+                V3_ForgetOperation
+            );
+            endpoints.MapGet(IpcHttpRoutes.Path("/managers"), V3_ListManagers);
+            endpoints.MapGet(
+                IpcHttpRoutes.Path("/managers/maintenance"),
+                V3_GetManagerMaintenance
+            );
+            endpoints.MapPost(
+                IpcHttpRoutes.Path("/managers/maintenance/reload"),
+                V3_ReloadManager
+            );
+            endpoints.MapPost(
+                IpcHttpRoutes.Path("/managers/maintenance/executable/set"),
+                V3_SetManagerExecutable
+            );
+            endpoints.MapPost(
+                IpcHttpRoutes.Path("/managers/maintenance/executable/clear"),
+                V3_ClearManagerExecutable
+            );
+            endpoints.MapPost(
+                IpcHttpRoutes.Path("/managers/maintenance/action"),
+                V3_RunManagerAction
+            );
+            endpoints.MapGet(IpcHttpRoutes.Path("/sources"), V3_ListSources);
+            endpoints.MapPost(IpcHttpRoutes.Path("/sources/add"), V3_AddSource);
+            endpoints.MapPost(IpcHttpRoutes.Path("/sources/remove"), V3_RemoveSource);
+            endpoints.MapGet(IpcHttpRoutes.Path("/settings"), V3_ListSettings);
+            endpoints.MapGet(IpcHttpRoutes.Path("/settings/item"), V3_GetSetting);
+            endpoints.MapPost(IpcHttpRoutes.Path("/settings/set"), V3_SetSetting);
+            endpoints.MapPost(IpcHttpRoutes.Path("/settings/clear"), V3_ClearSetting);
+            endpoints.MapPost(IpcHttpRoutes.Path("/settings/reset"), V3_ResetSettings);
+            endpoints.MapGet(
+                IpcHttpRoutes.Path("/secure-settings"),
+                V3_ListSecureSettings
+            );
+            endpoints.MapGet(
+                IpcHttpRoutes.Path("/secure-settings/item"),
+                V3_GetSecureSetting
+            );
+            endpoints.MapPost(
+                IpcHttpRoutes.Path("/secure-settings/set"),
+                V3_SetSecureSetting
+            );
+            endpoints.MapPost(
+                IpcHttpRoutes.Path("/managers/set-enabled"),
+                V3_SetManagerEnabled
+            );
+            endpoints.MapPost(
+                IpcHttpRoutes.Path("/managers/set-update-notifications"),
+                V3_SetManagerUpdateNotifications
+            );
+            endpoints.MapGet(
+                IpcHttpRoutes.Path("/desktop-shortcuts"),
+                V3_ListDesktopShortcuts
+            );
+            endpoints.MapPost(
+                IpcHttpRoutes.Path("/desktop-shortcuts/set"),
+                V3_SetDesktopShortcut
+            );
+            endpoints.MapPost(
+                IpcHttpRoutes.Path("/desktop-shortcuts/reset"),
+                V3_ResetDesktopShortcut
+            );
+            endpoints.MapPost(
+                IpcHttpRoutes.Path("/desktop-shortcuts/reset-all"),
+                V3_ResetDesktopShortcuts
+            );
+            endpoints.MapGet(IpcHttpRoutes.Path("/logs/app"), V3_GetAppLog);
+            endpoints.MapGet(
+                IpcHttpRoutes.Path("/logs/history"),
+                V3_GetOperationHistory
+            );
+            endpoints.MapGet(IpcHttpRoutes.Path("/logs/manager"), V3_GetManagerLog);
+            endpoints.MapGet(IpcHttpRoutes.Path("/backups/status"), V3_GetBackupStatus);
+            endpoints.MapPost(
+                IpcHttpRoutes.Path("/backups/local/create"),
+                V3_CreateLocalBackup
+            );
+            endpoints.MapPost(
+                IpcHttpRoutes.Path("/backups/github/sign-in/start"),
+                V3_StartGitHubDeviceFlow
+            );
+            endpoints.MapPost(
+                IpcHttpRoutes.Path("/backups/github/sign-in/complete"),
+                V3_CompleteGitHubDeviceFlow
+            );
+            endpoints.MapPost(
+                IpcHttpRoutes.Path("/backups/github/sign-out"),
+                V3_SignOutGitHub
+            );
+            endpoints.MapGet(
+                IpcHttpRoutes.Path("/backups/cloud"),
+                V3_ListCloudBackups
+            );
+            endpoints.MapPost(
+                IpcHttpRoutes.Path("/backups/cloud/create"),
+                V3_CreateCloudBackup
+            );
+            endpoints.MapPost(
+                IpcHttpRoutes.Path("/backups/cloud/download"),
+                V3_DownloadCloudBackup
+            );
+            endpoints.MapPost(
+                IpcHttpRoutes.Path("/backups/cloud/restore"),
+                V3_RestoreCloudBackup
+            );
+            endpoints.MapGet(IpcHttpRoutes.Path("/bundles"), V3_GetBundle);
+            endpoints.MapPost(IpcHttpRoutes.Path("/bundles/reset"), V3_ResetBundle);
+            endpoints.MapPost(IpcHttpRoutes.Path("/bundles/import"), V3_ImportBundle);
+            endpoints.MapPost(IpcHttpRoutes.Path("/bundles/export"), V3_ExportBundle);
+            endpoints.MapPost(IpcHttpRoutes.Path("/bundles/add"), V3_AddBundlePackage);
+            endpoints.MapPost(
+                IpcHttpRoutes.Path("/bundles/remove"),
+                V3_RemoveBundlePackage
+            );
+            endpoints.MapPost(
+                IpcHttpRoutes.Path("/bundles/install"),
+                V3_InstallBundle
+            );
+            endpoints.MapGet(
+                IpcHttpRoutes.Path("/packages/search"),
+                V3_SearchPackages
+            );
+            endpoints.MapGet(
+                IpcHttpRoutes.Path("/packages/installed"),
+                V3_ListInstalledPackages
+            );
+            endpoints.MapGet(
+                IpcHttpRoutes.Path("/packages/updates"),
+                V3_ListUpgradablePackages
+            );
+            endpoints.MapGet(
+                IpcHttpRoutes.Path("/packages/details"),
+                V3_GetPackageDetails
+            );
+            endpoints.MapGet(
+                IpcHttpRoutes.Path("/packages/versions"),
+                V3_GetPackageVersions
+            );
+            endpoints.MapGet(
+                IpcHttpRoutes.Path("/packages/ignored"),
+                V3_ListIgnoredUpdates
+            );
+            endpoints.MapPost(IpcHttpRoutes.Path("/packages/ignore"), V3_IgnorePackage);
+            endpoints.MapPost(
+                IpcHttpRoutes.Path("/packages/unignore"),
+                V3_UnignorePackage
+            );
+            endpoints.MapPost(
+                IpcHttpRoutes.Path("/packages/download"),
+                V3_DownloadPackage
+            );
+            endpoints.MapPost(
+                IpcHttpRoutes.Path("/packages/install"),
+                V3_InstallPackage
+            );
+            endpoints.MapPost(
+                IpcHttpRoutes.Path("/packages/reinstall"),
+                V3_ReinstallPackage
+            );
+            endpoints.MapPost(IpcHttpRoutes.Path("/packages/update"), V3_UpdatePackage);
+            endpoints.MapPost(
+                IpcHttpRoutes.Path("/packages/uninstall"),
+                V3_UninstallPackage
+            );
+            endpoints.MapPost(
+                IpcHttpRoutes.Path("/packages/uninstall-then-reinstall"),
+                V3_UninstallThenReinstallPackage
+            );
+            endpoints.MapPost(IpcHttpRoutes.Path("/packages/show"), V3_ShowPackage);
+            endpoints.MapPost(
+                IpcHttpRoutes.Path("/packages/update-all"),
+                V3_UpdateAllPackages
+            );
+            endpoints.MapPost(
+                IpcHttpRoutes.Path("/packages/update-manager"),
+                V3_UpdateAllPackagesForManager
+            );
+            _host = app;
             try
             {
                 await _host.StartAsync();
@@ -444,11 +444,7 @@ namespace UniGetUI.Interface
                     Version = CoreData.VersionName,
                     BuildNumber = CoreData.BuildNumber,
                 },
-                new JsonSerializerOptions(SerializationHelpers.DefaultOptions)
-                {
-                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-                    WriteIndented = true,
-                }
+                IpcJson.Options
             );
         }
 
@@ -462,11 +458,7 @@ namespace UniGetUI.Interface
 
             await context.Response.WriteAsJsonAsync(
                 IpcManagerSettingsApi.ListManagers(),
-                new JsonSerializerOptions(SerializationHelpers.DefaultOptions)
-                {
-                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-                    WriteIndented = true,
-                }
+                IpcJson.Options
             );
         }
 
@@ -485,11 +477,7 @@ namespace UniGetUI.Interface
                         ?? throw new InvalidOperationException(
                             "The application did not register an app-state provider."
                         ),
-                    new JsonSerializerOptions(SerializationHelpers.DefaultOptions)
-                    {
-                        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-                        WriteIndented = true,
-                    }
+                    IpcJson.Options
                 );
             }
             catch (InvalidOperationException ex)
@@ -611,11 +599,7 @@ namespace UniGetUI.Interface
             {
                 await context.Response.WriteAsJsonAsync(
                     IpcManagerSettingsApi.ListSources(context.Request.Query["manager"]),
-                    new JsonSerializerOptions(SerializationHelpers.DefaultOptions)
-                    {
-                        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-                        WriteIndented = true,
-                    }
+                    IpcJson.Options
                 );
             }
             catch (InvalidOperationException ex)
@@ -645,11 +629,7 @@ namespace UniGetUI.Interface
             {
                 await context.Response.WriteAsJsonAsync(
                     IpcManagerMaintenanceApi.GetMaintenanceInfo(managerName),
-                    new JsonSerializerOptions(SerializationHelpers.DefaultOptions)
-                    {
-                        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-                        WriteIndented = true,
-                    }
+                    IpcJson.Options
                 );
             }
             catch (InvalidOperationException ex)
@@ -711,11 +691,7 @@ namespace UniGetUI.Interface
 
             await context.Response.WriteAsJsonAsync(
                 IpcManagerSettingsApi.ListSettings(),
-                new JsonSerializerOptions(SerializationHelpers.DefaultOptions)
-                {
-                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-                    WriteIndented = true,
-                }
+                IpcJson.Options
             );
         }
 
@@ -739,11 +715,7 @@ namespace UniGetUI.Interface
             {
                 await context.Response.WriteAsJsonAsync(
                     IpcManagerSettingsApi.GetSetting(key),
-                    new JsonSerializerOptions(SerializationHelpers.DefaultOptions)
-                    {
-                        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-                        WriteIndented = true,
-                    }
+                    IpcJson.Options
                 );
             }
             catch (InvalidOperationException ex)
@@ -774,11 +746,7 @@ namespace UniGetUI.Interface
                             Value = GetOptionalQueryValue(context.Request, "value"),
                         }
                     ),
-                    new JsonSerializerOptions(SerializationHelpers.DefaultOptions)
-                    {
-                        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-                        WriteIndented = true,
-                    }
+                    IpcJson.Options
                 );
             }
             catch (InvalidOperationException ex)
@@ -808,11 +776,7 @@ namespace UniGetUI.Interface
             {
                 await context.Response.WriteAsJsonAsync(
                     IpcManagerSettingsApi.ClearSetting(key),
-                    new JsonSerializerOptions(SerializationHelpers.DefaultOptions)
-                    {
-                        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-                        WriteIndented = true,
-                    }
+                    IpcJson.Options
                 );
             }
             catch (InvalidOperationException ex)
@@ -833,11 +797,7 @@ namespace UniGetUI.Interface
             IpcManagerSettingsApi.ResetSettingsPreservingSession();
             await context.Response.WriteAsJsonAsync(
                 IpcCommandResult.Success("reset-settings"),
-                new JsonSerializerOptions(SerializationHelpers.DefaultOptions)
-                {
-                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-                    WriteIndented = true,
-                }
+                IpcJson.Options
             );
         }
 
@@ -851,11 +811,7 @@ namespace UniGetUI.Interface
 
             await context.Response.WriteAsJsonAsync(
                 IpcSecureSettingsApi.ListSettings(context.Request.Query["user"]),
-                new JsonSerializerOptions(SerializationHelpers.DefaultOptions)
-                {
-                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-                    WriteIndented = true,
-                }
+                IpcJson.Options
             );
         }
 
@@ -874,11 +830,7 @@ namespace UniGetUI.Interface
                         GetRequiredQueryValue(context, "key"),
                         GetOptionalQueryValue(context.Request, "user")
                     ),
-                    new JsonSerializerOptions(SerializationHelpers.DefaultOptions)
-                    {
-                        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-                        WriteIndented = true,
-                    }
+                    IpcJson.Options
                 );
             }
             catch (InvalidOperationException ex)
@@ -914,11 +866,7 @@ namespace UniGetUI.Interface
                             Enabled = enabled,
                         }
                     ),
-                    new JsonSerializerOptions(SerializationHelpers.DefaultOptions)
-                    {
-                        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-                        WriteIndented = true,
-                    }
+                    IpcJson.Options
                 );
             }
             catch (InvalidOperationException ex)
@@ -953,11 +901,7 @@ namespace UniGetUI.Interface
                             Enabled = enabled,
                         }
                     ),
-                    new JsonSerializerOptions(SerializationHelpers.DefaultOptions)
-                    {
-                        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-                        WriteIndented = true,
-                    }
+                    IpcJson.Options
                 );
             }
             catch (InvalidOperationException ex)
@@ -992,11 +936,7 @@ namespace UniGetUI.Interface
                             Enabled = enabled,
                         }
                     ),
-                    new JsonSerializerOptions(SerializationHelpers.DefaultOptions)
-                    {
-                        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-                        WriteIndented = true,
-                    }
+                    IpcJson.Options
                 );
             }
             catch (InvalidOperationException ex)
@@ -1016,11 +956,7 @@ namespace UniGetUI.Interface
 
             await context.Response.WriteAsJsonAsync(
                 IpcDesktopShortcutsApi.ListShortcuts(),
-                new JsonSerializerOptions(SerializationHelpers.DefaultOptions)
-                {
-                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-                    WriteIndented = true,
-                }
+                IpcJson.Options
             );
         }
 
@@ -1042,11 +978,7 @@ namespace UniGetUI.Interface
                             Status = GetOptionalQueryValue(context.Request, "status"),
                         }
                     ),
-                    new JsonSerializerOptions(SerializationHelpers.DefaultOptions)
-                    {
-                        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-                        WriteIndented = true,
-                    }
+                    IpcJson.Options
                 );
             }
             catch (InvalidOperationException ex)
@@ -1073,11 +1005,7 @@ namespace UniGetUI.Interface
                             Path = GetRequiredQueryValue(context, "path"),
                         }
                     ),
-                    new JsonSerializerOptions(SerializationHelpers.DefaultOptions)
-                    {
-                        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-                        WriteIndented = true,
-                    }
+                    IpcJson.Options
                 );
             }
             catch (InvalidOperationException ex)
@@ -1097,11 +1025,7 @@ namespace UniGetUI.Interface
 
             await context.Response.WriteAsJsonAsync(
                 IpcDesktopShortcutsApi.ResetAllShortcuts(),
-                new JsonSerializerOptions(SerializationHelpers.DefaultOptions)
-                {
-                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-                    WriteIndented = true,
-                }
+                IpcJson.Options
             );
         }
 
@@ -1118,11 +1042,7 @@ namespace UniGetUI.Interface
                 : 4;
             await context.Response.WriteAsJsonAsync(
                 IpcLogsApi.ListAppLog(level),
-                new JsonSerializerOptions(SerializationHelpers.DefaultOptions)
-                {
-                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-                    WriteIndented = true,
-                }
+                IpcJson.Options
             );
         }
 
@@ -1136,11 +1056,7 @@ namespace UniGetUI.Interface
 
             await context.Response.WriteAsJsonAsync(
                 IpcLogsApi.ListOperationHistory(),
-                new JsonSerializerOptions(SerializationHelpers.DefaultOptions)
-                {
-                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-                    WriteIndented = true,
-                }
+                IpcJson.Options
             );
         }
 
@@ -1159,11 +1075,7 @@ namespace UniGetUI.Interface
                         context.Request.Query["manager"],
                         bool.TryParse(context.Request.Query["verbose"], out bool verbose) && verbose
                     ),
-                    new JsonSerializerOptions(SerializationHelpers.DefaultOptions)
-                    {
-                        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-                        WriteIndented = true,
-                    }
+                    IpcJson.Options
                 );
             }
             catch (InvalidOperationException ex)
@@ -1183,11 +1095,7 @@ namespace UniGetUI.Interface
 
             await context.Response.WriteAsJsonAsync(
                 await IpcBackupApi.GetStatusAsync(),
-                new JsonSerializerOptions(SerializationHelpers.DefaultOptions)
-                {
-                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-                    WriteIndented = true,
-                }
+                IpcJson.Options
             );
         }
 
@@ -1203,11 +1111,7 @@ namespace UniGetUI.Interface
             {
                 await context.Response.WriteAsJsonAsync(
                     await IpcBackupApi.CreateLocalBackupAsync(),
-                    new JsonSerializerOptions(SerializationHelpers.DefaultOptions)
-                    {
-                        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-                        WriteIndented = true,
-                    }
+                    IpcJson.Options
                 );
             }
             catch (InvalidOperationException ex)
@@ -1237,11 +1141,7 @@ namespace UniGetUI.Interface
             {
                 await context.Response.WriteAsJsonAsync(
                     await IpcBackupApi.CompleteGitHubDeviceFlowAsync(),
-                    new JsonSerializerOptions(SerializationHelpers.DefaultOptions)
-                    {
-                        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-                        WriteIndented = true,
-                    }
+                    IpcJson.Options
                 );
             }
             catch (InvalidOperationException ex)
@@ -1261,11 +1161,7 @@ namespace UniGetUI.Interface
 
             await context.Response.WriteAsJsonAsync(
                 await IpcBackupApi.SignOutGitHubAsync(),
-                new JsonSerializerOptions(SerializationHelpers.DefaultOptions)
-                {
-                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-                    WriteIndented = true,
-                }
+                IpcJson.Options
             );
         }
 
@@ -1281,11 +1177,7 @@ namespace UniGetUI.Interface
             {
                 await context.Response.WriteAsJsonAsync(
                     await IpcBackupApi.ListCloudBackupsAsync(),
-                    new JsonSerializerOptions(SerializationHelpers.DefaultOptions)
-                    {
-                        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-                        WriteIndented = true,
-                    }
+                    IpcJson.Options
                 );
             }
             catch (InvalidOperationException ex)
@@ -1307,11 +1199,7 @@ namespace UniGetUI.Interface
             {
                 await context.Response.WriteAsJsonAsync(
                     await IpcBackupApi.CreateCloudBackupAsync(),
-                    new JsonSerializerOptions(SerializationHelpers.DefaultOptions)
-                    {
-                        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-                        WriteIndented = true,
-                    }
+                    IpcJson.Options
                 );
             }
             catch (InvalidOperationException ex)
@@ -1349,11 +1237,7 @@ namespace UniGetUI.Interface
             {
                 await context.Response.WriteAsJsonAsync(
                     await IpcBundleApi.GetCurrentBundleAsync(),
-                    new JsonSerializerOptions(SerializationHelpers.DefaultOptions)
-                    {
-                        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-                        WriteIndented = true,
-                    }
+                    IpcJson.Options
                 );
             }
             catch (InvalidOperationException ex)
@@ -1375,11 +1259,7 @@ namespace UniGetUI.Interface
             {
                 await context.Response.WriteAsJsonAsync(
                     IpcBundleApi.ResetBundle(),
-                    new JsonSerializerOptions(SerializationHelpers.DefaultOptions)
-                    {
-                        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-                        WriteIndented = true,
-                    }
+                    IpcJson.Options
                 );
             }
             catch (InvalidOperationException ex)
@@ -1459,11 +1339,7 @@ namespace UniGetUI.Interface
             {
                 await context.Response.WriteAsJsonAsync(
                     IpcPackageApi.SearchPackages(query, manager, maxResults),
-                    new JsonSerializerOptions(SerializationHelpers.DefaultOptions)
-                    {
-                        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-                        WriteIndented = true,
-                    }
+                    IpcJson.Options
                 );
             }
             catch (InvalidOperationException ex)
@@ -1485,11 +1361,7 @@ namespace UniGetUI.Interface
             {
                 await context.Response.WriteAsJsonAsync(
                     IpcPackageApi.ListInstalledPackages(context.Request.Query["manager"]),
-                    new JsonSerializerOptions(SerializationHelpers.DefaultOptions)
-                    {
-                        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-                        WriteIndented = true,
-                    }
+                    IpcJson.Options
                 );
             }
             catch (InvalidOperationException ex)
@@ -1511,11 +1383,7 @@ namespace UniGetUI.Interface
             {
                 await context.Response.WriteAsJsonAsync(
                     IpcPackageApi.ListUpgradablePackages(context.Request.Query["manager"]),
-                    new JsonSerializerOptions(SerializationHelpers.DefaultOptions)
-                    {
-                        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-                        WriteIndented = true,
-                    }
+                    IpcJson.Options
                 );
             }
             catch (InvalidOperationException ex)
@@ -1547,11 +1415,7 @@ namespace UniGetUI.Interface
                     await IpcPackageApi.GetPackageDetailsAsync(
                         BuildPackageActionRequest(context.Request)
                     ),
-                    new JsonSerializerOptions(SerializationHelpers.DefaultOptions)
-                    {
-                        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-                        WriteIndented = true,
-                    }
+                    IpcJson.Options
                 );
             }
             catch (InvalidOperationException ex)
@@ -1581,11 +1445,7 @@ namespace UniGetUI.Interface
             {
                 await context.Response.WriteAsJsonAsync(
                     IpcPackageApi.GetPackageVersions(BuildPackageActionRequest(context.Request)),
-                    new JsonSerializerOptions(SerializationHelpers.DefaultOptions)
-                    {
-                        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-                        WriteIndented = true,
-                    }
+                    IpcJson.Options
                 );
             }
             catch (InvalidOperationException ex)
@@ -1605,11 +1465,7 @@ namespace UniGetUI.Interface
 
             await context.Response.WriteAsJsonAsync(
                 IpcPackageApi.ListIgnoredUpdates(),
-                new JsonSerializerOptions(SerializationHelpers.DefaultOptions)
-                {
-                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-                    WriteIndented = true,
-                }
+                IpcJson.Options
             );
         }
 
@@ -1694,11 +1550,7 @@ namespace UniGetUI.Interface
                         ?? throw new InvalidOperationException(
                             "The current UniGetUI session cannot open package details."
                         ),
-                    new JsonSerializerOptions(SerializationHelpers.DefaultOptions)
-                    {
-                        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-                        WriteIndented = true,
-                    }
+                    IpcJson.Options
                 );
             }
             catch (InvalidOperationException ex)
@@ -1772,11 +1624,7 @@ namespace UniGetUI.Interface
 
                 await context.Response.WriteAsJsonAsync(
                     await action(request),
-                    new JsonSerializerOptions(SerializationHelpers.DefaultOptions)
-                    {
-                        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-                        WriteIndented = true,
-                    }
+                    IpcJson.Options
                 );
             }
             catch (InvalidOperationException ex)
@@ -1798,11 +1646,7 @@ namespace UniGetUI.Interface
             {
                 await context.Response.WriteAsJsonAsync(
                     action(),
-                    new JsonSerializerOptions(SerializationHelpers.DefaultOptions)
-                    {
-                        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-                        WriteIndented = true,
-                    }
+                    IpcJson.Options
                 );
             }
             catch (InvalidOperationException ex)
@@ -1827,11 +1671,7 @@ namespace UniGetUI.Interface
             {
                 await context.Response.WriteAsJsonAsync(
                     action(),
-                    new JsonSerializerOptions(SerializationHelpers.DefaultOptions)
-                    {
-                        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-                        WriteIndented = true,
-                    }
+                    IpcJson.Options
                 );
             }
             catch (InvalidOperationException ex)
@@ -1864,11 +1704,7 @@ namespace UniGetUI.Interface
             {
                 await context.Response.WriteAsJsonAsync(
                     await action(BuildPackageActionRequest(context.Request)),
-                    new JsonSerializerOptions(SerializationHelpers.DefaultOptions)
-                    {
-                        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-                        WriteIndented = true,
-                    }
+                    IpcJson.Options
                 );
             }
             catch (InvalidOperationException ex)
@@ -1900,11 +1736,7 @@ namespace UniGetUI.Interface
                             SourceUrl = GetOptionalQueryValue(context.Request, "url"),
                         }
                     ),
-                    new JsonSerializerOptions(SerializationHelpers.DefaultOptions)
-                    {
-                        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-                        WriteIndented = true,
-                    }
+                    IpcJson.Options
                 );
             }
             catch (InvalidOperationException ex)
@@ -1929,11 +1761,7 @@ namespace UniGetUI.Interface
             {
                 await context.Response.WriteAsJsonAsync(
                     await action(await ReadJsonBodyAsync<TRequest>(context)),
-                    new JsonSerializerOptions(SerializationHelpers.DefaultOptions)
-                    {
-                        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-                        WriteIndented = true,
-                    }
+                    IpcJson.Options
                 );
             }
             catch (InvalidOperationException ex)
@@ -1958,11 +1786,7 @@ namespace UniGetUI.Interface
             {
                 await context.Response.WriteAsJsonAsync(
                     await action(await ReadJsonBodyAsync<TRequest>(context)),
-                    new JsonSerializerOptions(SerializationHelpers.DefaultOptions)
-                    {
-                        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-                        WriteIndented = true,
-                    }
+                    IpcJson.Options
                 );
             }
             catch (InvalidOperationException ex)
@@ -1987,11 +1811,7 @@ namespace UniGetUI.Interface
             {
                 await context.Response.WriteAsJsonAsync(
                     await action(await ReadJsonBodyAsync<TRequest>(context)),
-                    new JsonSerializerOptions(SerializationHelpers.DefaultOptions)
-                    {
-                        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-                        WriteIndented = true,
-                    }
+                    IpcJson.Options
                 );
             }
             catch (InvalidOperationException ex)
@@ -2003,13 +1823,8 @@ namespace UniGetUI.Interface
 
         private static async Task<TRequest> ReadJsonBodyAsync<TRequest>(HttpContext context)
         {
-            var request = await context.Request.ReadFromJsonAsync<TRequest>(
-                new JsonSerializerOptions(SerializationHelpers.DefaultOptions)
-                {
-                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-                    WriteIndented = true,
-                }
-            );
+            using var reader = new StreamReader(context.Request.Body, Encoding.UTF8);
+            var request = IpcJson.Deserialize<TRequest>(await reader.ReadToEndAsync());
             return request
                 ?? throw new InvalidOperationException("The request body is required.");
         }
