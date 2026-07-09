@@ -281,6 +281,25 @@ public partial class MainWindow : Window
         if (e.PropertyName is nameof(MainWindowViewModel.OperationsPanelExpanded)
                            or nameof(MainWindowViewModel.OperationsPanelVisible))
             UpdateOperationsPanelRow();
+
+        // Expanding the panel while an operation has failed jumps to that op (the failure
+        // badge on the chevron is what drew the user here).
+        if (e.PropertyName is nameof(MainWindowViewModel.OperationsPanelExpanded)
+            && ViewModel.OperationsPanelExpanded)
+            ScrollToFirstFailedOperation();
+    }
+
+    private void ScrollToFirstFailedOperation()
+    {
+        if (ViewModel.FirstFailedOperation is not { } failed)
+            return;
+
+        // Defer until the just-shown list has laid out its containers.
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (OperationsList.ContainerFromItem(failed) is Control container)
+                container.BringIntoView();
+        }, DispatcherPriority.Background);
     }
 
     // Drive the operations-panel grid row: a resizable pixel height while the panel is
@@ -1254,6 +1273,7 @@ public partial class MainWindow : Window
     }
 
     // ─── Public API (legacy compat) ───────────────────────────────────────────
+    // Surfaces a fresh, auto-dismissing toast per call (name kept for pre-toast callers).
     public void ShowBanner(string title, string message, RuntimeNotificationLevel level)
     {
         if (level == RuntimeNotificationLevel.Progress) return;
@@ -1264,12 +1284,30 @@ public partial class MainWindow : Window
             RuntimeNotificationLevel.Success => InfoBarSeverity.Success,
             _ => InfoBarSeverity.Informational,
         };
-        ViewModel.ErrorBanner.ActionButtonText = "";
-        ViewModel.ErrorBanner.ActionButtonCommand = null;
-        ViewModel.ErrorBanner.Title = title;
-        ViewModel.ErrorBanner.Message = message;
-        ViewModel.ErrorBanner.Severity = severity;
-        ViewModel.ErrorBanner.IsOpen = true;
+
+        var toast = new InfoBarViewModel
+        {
+            Title = title,
+            Message = message,
+            Severity = severity,
+            IsClosable = true,
+            IsOpen = true,
+        };
+        toast.OnClosed = () => ViewModel.DismissToast(toast);
+        ViewModel.ShowToast(toast);
+    }
+
+    // Pause/resume a toast's auto-dismiss countdown while the pointer is over it.
+    private void Toast_PointerEntered(object? sender, PointerEventArgs e)
+    {
+        if ((sender as Control)?.DataContext is InfoBarViewModel vm)
+            ViewModel.PauseToast(vm);
+    }
+
+    private void Toast_PointerExited(object? sender, PointerEventArgs e)
+    {
+        if ((sender as Control)?.DataContext is InfoBarViewModel vm)
+            ViewModel.ResumeToast(vm);
     }
 
     public void UpdateSystemTrayStatus() => _trayService?.UpdateStatus();

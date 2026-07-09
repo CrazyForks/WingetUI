@@ -30,36 +30,46 @@
             <settings:CheckboxCard SettingName="DisableNotifications"
                                    Text="{t:Translate Enable UniGetUI notifications}"
                                    StateChangedCommand="{Binding UpdateNotificationsEnabledCommand}"
-                                   CornerRadius="8"
+                                   CornerRadius="8,8,0,0"
                                    IsEnabled="{Binding IsSystemTrayWarningVisible, Converter={x:Static BoolConverters.Not}}"/>
 
-            <settings:TranslatedTextBlock Text="Notification types"
-                                          FontSize="14"
-                                          FontWeight="SemiBold"
-                                          Margin="44,32,4,8"
-                                          automation:AutomationProperties.HeadingLevel="2"/>
-
-            <settings:CheckboxCard SettingName="DisableUpdatesNotifications"
-                                   Text="{t:Translate Show a notification when there are available updates}"
-                                   CornerRadius="8,8,0,0"
-                                   IsEnabled="{Binding IsNotificationsEnabled}"/>
-
-            <settings:CheckboxCard SettingName="DisableProgressNotifications"
-                                   Text="{t:Translate Show a silent notification when an operation is running}"
-                                   BorderThickness="1,0"
-                                   CornerRadius="0"
-                                   IsEnabled="{Binding IsNotificationsEnabled}"/>
-
-            <settings:CheckboxCard SettingName="DisableErrorNotifications"
-                                   Text="{t:Translate Show a notification when an operation fails}"
-                                   CornerRadius="0"
-                                   IsEnabled="{Binding IsNotificationsEnabled}"/>
-
-            <settings:CheckboxCard SettingName="DisableSuccessNotifications"
-                                   Text="{t:Translate Show a notification when an operation finishes successfully}"
+            <!-- In-app summary toast (works on all platforms, so not in the OS-only group below) -->
+            <settings:CheckboxCard SettingName="ShowOperationSummaryNotifications"
+                                   Text="{t:Translate Show an in-app summary toast when a batch of operations finishes}"
                                    BorderThickness="1,0,1,1"
-                                   CornerRadius="0,0,8,8"
-                                   IsEnabled="{Binding IsNotificationsEnabled}"/>
+                                   CornerRadius="0,0,8,8"/>
+
+            <!-- Notification types are Windows/macOS-only (no Linux delivery path). -->
+            <StackPanel Orientation="Vertical" IsVisible="{Binding AreNotificationTypesSupported}">
+
+                <settings:TranslatedTextBlock Text="Notification types"
+                                              FontSize="14"
+                                              FontWeight="SemiBold"
+                                              Margin="44,32,4,8"
+                                              automation:AutomationProperties.HeadingLevel="2"/>
+
+                <settings:CheckboxCard SettingName="DisableUpdatesNotifications"
+                                       Text="{t:Translate Show a notification when there are available updates}"
+                                       CornerRadius="8,8,0,0"
+                                       IsEnabled="{Binding IsNotificationsEnabled}"/>
+
+                <settings:CheckboxCard SettingName="DisableProgressNotifications"
+                                       Text="{t:Translate Show a silent notification when an operation is running}"
+                                       BorderThickness="1,0"
+                                       CornerRadius="0"
+                                       IsEnabled="{Binding IsNotificationsEnabled}"/>
+
+                <settings:CheckboxCard SettingName="DisableErrorNotifications"
+                                       Text="{t:Translate Show a notification when an operation fails}"
+                                       CornerRadius="0"
+                                       IsEnabled="{Binding IsNotificationsEnabled}"/>
+
+                <settings:CheckboxCard SettingName="DisableSuccessNotifications"
+                                       Text="{t:Translate Show a notification when an operation finishes successfully}"
+                                       BorderThickness="1,0,1,1"
+                                       CornerRadius="0,0,8,8"
+                                       IsEnabled="{Binding IsNotificationsEnabled}"/>
+            </StackPanel>
 
         </StackPanel>
     </ScrollViewer>

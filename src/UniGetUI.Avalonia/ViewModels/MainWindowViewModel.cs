@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using Avalonia;
 using Avalonia.Automation;
@@ -63,12 +64,24 @@ public partial class MainWindowViewModel : ViewModelBase
     public AvaloniaList<OperationViewModel> Operations => AvaloniaOperationRegistry.OperationViewModels;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowFailedOperationBadge))]
     private bool _operationsPanelVisible;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowFailedOperationBadge))]
     private bool _operationsPanelExpanded = true;
 
     private readonly List<AbstractOperation> _operationBatch = new();
+    private bool _batchSummaryShown;
+
+    public bool HasFailedOperations => Operations.Any(o => o.Operation.Status is OperationStatus.Failed);
+
+    public OperationViewModel? FirstFailedOperation =>
+        Operations.FirstOrDefault(o => o.Operation.Status is OperationStatus.Failed);
+
+    // Red badge on the chevron when the panel is collapsed and an operation failed
+    // (failures no longer pop a toast; expanded, the failure is already visible).
+    public bool ShowFailedOperationBadge => OperationsPanelVisible && !OperationsPanelExpanded && HasFailedOperations;
 
     public string OperationsHeaderText
     {
@@ -91,6 +104,7 @@ public partial class MainWindowViewModel : ViewModelBase
             foreach (var old in _operationBatch)
                 old.StatusChanged -= OnOperationStatusChanged;
             _operationBatch.Clear();
+            _batchSummaryShown = false;
         }
 
         if (!_operationBatch.Contains(op))
@@ -101,7 +115,42 @@ public partial class MainWindowViewModel : ViewModelBase
     }
 
     private void OnOperationStatusChanged(object? sender, OperationStatus e)
-        => Dispatcher.UIThread.Post(() => OnPropertyChanged(nameof(OperationsHeaderText)));
+        => Dispatcher.UIThread.Post(() =>
+        {
+            OnPropertyChanged(nameof(OperationsHeaderText));
+            OnPropertyChanged(nameof(HasFailedOperations));
+            OnPropertyChanged(nameof(ShowFailedOperationBadge));
+            MaybeShowBatchSummaryToast();
+        });
+
+    // Opt-in: one toast summarizing the batch once every operation in it has finished.
+    private void MaybeShowBatchSummaryToast()
+    {
+        if (_batchSummaryShown || _operationBatch.Count == 0) return;
+        if (!Settings.Get(Settings.K.ShowOperationSummaryNotifications)) return;
+        if (_operationBatch.Any(o => o.Status is OperationStatus.InQueue or OperationStatus.Running)) return;
+
+        _batchSummaryShown = true;
+
+        int total = _operationBatch.Count;
+        int failed = _operationBatch.Count(o => o.Status is OperationStatus.Failed);
+        int succeeded = _operationBatch.Count(o => o.Status is OperationStatus.Succeeded);
+
+        var toast = new InfoBarViewModel
+        {
+            Title = failed > 0
+                ? CoreTools.Translate("Operations finished with errors")
+                : CoreTools.Translate("Operations completed"),
+            Message = failed > 0
+                ? CoreTools.Translate("{0} of {1} succeeded, {2} failed", succeeded, total, failed)
+                : CoreTools.Translate("{0} of {1} operations completed", succeeded, total),
+            Severity = failed > 0 ? InfoBarSeverity.Error : InfoBarSeverity.Success,
+            IsClosable = true,
+            IsOpen = true,
+        };
+        toast.OnClosed = () => DismissToast(toast);
+        ShowToast(toast);
+    }
 
     [RelayCommand]
     private void ToggleOperationsPanel() => OperationsPanelExpanded = !OperationsPanelExpanded;
@@ -169,11 +218,125 @@ public partial class MainWindowViewModel : ViewModelBase
         ? $"UniGetUI {CoreTools.Translate("version {0}", CoreData.VersionName)}"
         : "UniGetUI";
 
-    // ─── Banners ─────────────────────────────────────────────────────────────
+    // ─── Notifications (bottom-right toasts) ───────────────────────────────────
+    // Persistent banners kept as singletons; RegisterBannerToast mirrors their IsOpen into Toasts.
     public InfoBarViewModel UpdatesBanner { get; } = new() { Severity = InfoBarSeverity.Success };
-    public InfoBarViewModel ErrorBanner { get; } = new() { Severity = InfoBarSeverity.Error };
     public InfoBarViewModel WinGetWarningBanner { get; } = new() { Severity = InfoBarSeverity.Warning };
     public InfoBarViewModel TelemetryWarner { get; } = new() { Severity = InfoBarSeverity.Informational };
+
+    // Oldest first (rendered bottom-up so the newest sits nearest the corner).
+    public ObservableCollection<InfoBarViewModel> Toasts { get; } = new();
+    private readonly Dictionary<InfoBarViewModel, DispatcherTimer> _toastTimers = new();
+    private const int MaxVisibleToasts = 5;
+
+    // A toast with an action button stays until acted on; everything else auto-dismisses.
+    private static bool IsSticky(InfoBarViewModel t) => !string.IsNullOrEmpty(t.ActionButtonText);
+    private static TimeSpan ToastDuration(InfoBarViewModel t)
+        => t.Severity is InfoBarSeverity.Error or InfoBarSeverity.Warning
+            ? TimeSpan.FromSeconds(8)
+            : TimeSpan.FromSeconds(5);
+
+    public void ShowToast(InfoBarViewModel toast)
+    {
+        if (!Dispatcher.UIThread.CheckAccess())
+        {
+            Dispatcher.UIThread.Post(() => ShowToast(toast));
+            return;
+        }
+        if (!Toasts.Contains(toast))
+        {
+            Toasts.Add(toast);
+            AnnounceToast(toast);
+        }
+        TrimToastStack(keep: toast);
+        ArmToastTimer(toast);
+    }
+
+    // Keep the stack from overflowing the screen: drop the oldest auto-dismissing toasts,
+    // but never a sticky (action-button) one or the toast just shown.
+    private void TrimToastStack(InfoBarViewModel keep)
+    {
+        while (Toasts.Count > MaxVisibleToasts)
+        {
+            var oldest = Toasts.FirstOrDefault(t => t != keep && !IsSticky(t));
+            if (oldest is null) break;
+            DismissToast(oldest);
+        }
+    }
+
+    // Surface the toast to screen readers via the live region (assertive for errors so it
+    // interrupts, polite otherwise) — the toast's own automation name isn't announced on its own.
+    private static void AnnounceToast(InfoBarViewModel toast)
+    {
+        string message = string.IsNullOrEmpty(toast.Message)
+            ? toast.Title
+            : $"{toast.Title}. {toast.Message}";
+        AccessibilityAnnouncementService.Announce(
+            message,
+            toast.Severity is InfoBarSeverity.Error
+                ? AutomationLiveSetting.Assertive
+                : AutomationLiveSetting.Polite);
+    }
+
+    public void DismissToast(InfoBarViewModel toast)
+    {
+        if (!Dispatcher.UIThread.CheckAccess())
+        {
+            Dispatcher.UIThread.Post(() => DismissToast(toast));
+            return;
+        }
+        DisposeToastTimer(toast);
+        Toasts.Remove(toast);
+    }
+
+    // Pause the auto-dismiss countdown while the pointer hovers a toast; restart it on leave.
+    public void PauseToast(InfoBarViewModel toast)
+    {
+        if (_toastTimers.TryGetValue(toast, out var timer)) timer.Stop();
+    }
+
+    public void ResumeToast(InfoBarViewModel toast)
+    {
+        if (_toastTimers.TryGetValue(toast, out var timer)) { timer.Stop(); timer.Start(); }
+    }
+
+    private void ArmToastTimer(InfoBarViewModel toast)
+    {
+        DisposeToastTimer(toast);
+        if (IsSticky(toast))
+            return;
+
+        var timer = new DispatcherTimer { Interval = ToastDuration(toast) };
+        timer.Tick += (_, _) => toast.IsOpen = false;
+        _toastTimers[toast] = timer;
+        timer.Start();
+    }
+
+    private void DisposeToastTimer(InfoBarViewModel toast)
+    {
+        if (_toastTimers.Remove(toast, out var timer))
+            timer.Stop();
+    }
+
+    // Mirrors a persistent banner's IsOpen into Toasts so code that just flips IsOpen keeps working.
+    private void RegisterBannerToast(InfoBarViewModel banner)
+    {
+        banner.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(InfoBarViewModel.IsOpen))
+            {
+                if (banner.IsOpen) ShowToast(banner);
+                else DismissToast(banner);
+            }
+            // Content can change in place while the banner stays open (the updater cycles
+            // statuses on the same banner, finally adding the "Update now" action); re-arm so
+            // stickiness/countdown track the new content instead of a stale timer dismissing it.
+            else if (banner.IsOpen && Toasts.Contains(banner))
+            {
+                ArmToastTimer(banner);
+            }
+        };
+    }
 
     // ─── Constructor ─────────────────────────────────────────────────────────
     [RelayCommand]
@@ -182,6 +345,11 @@ public partial class MainWindowViewModel : ViewModelBase
     public MainWindowViewModel()
     {
         AccessibilityAnnouncementService.AnnouncementRequested += OnAnnouncementRequested;
+
+        // Wire before the blocks below flip the banners' IsOpen flags.
+        RegisterBannerToast(UpdatesBanner);
+        RegisterBannerToast(WinGetWarningBanner);
+        RegisterBannerToast(TelemetryWarner);
 
         DiscoverPage = new DiscoverSoftwarePage();
         UpdatesPage = new SoftwareUpdatesPage();
@@ -264,6 +432,8 @@ public partial class MainWindowViewModel : ViewModelBase
                     AddToBatch(vm.Operation);
             OperationsPanelVisible = Operations.Count > 0;
             OnPropertyChanged(nameof(OperationsHeaderText));
+            OnPropertyChanged(nameof(HasFailedOperations));
+            OnPropertyChanged(nameof(ShowFailedOperationBadge));
         };
 
         if (OperatingSystem.IsWindows() && CoreTools.IsAdministrator() && !Settings.Get(Settings.K.AlreadyWarnedAboutAdmin))
