@@ -6,6 +6,8 @@
 #define MyAppPublisher "Devolutions Inc."
 #define MyAppURL "https://github.com/Devolutions/UniGetUI"
 #define MyAppExeName "UniGetUI.exe"
+#define MyAppPublisherURL "https://devolutions.net/unigetui/"
+#define MyAppCopyright "Copyright 2021-2026 " + MyAppPublisher
 #ifndef InstallerCompression
 #define InstallerCompression "lzma"
 #endif
@@ -17,17 +19,23 @@
 [Setup]
 ; NOTE: The value of AppId uniquely identifies this application. Do not use the same AppId value in installers for other applications.
 ; (To generate a new GUID, click Tools | Generate GUID inside the IDE.)
-UninstallDisplayName="UniGetUI"
+UninstallDisplayName={#MyAppName}
 AppId={{889610CC-4337-4BDB-AC3B-4F21806C0BDE}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppVerName={#MyAppName} {#MyAppVersion}
 AppPublisher={#MyAppPublisher}
-AppPublisherURL="https://devolutions.net/unigetui/"
+AppPublisherURL={#MyAppPublisherURL}
 AppSupportURL={#MyAppURL}
 AppUpdatesURL={#MyAppURL}
+; VersionInfoVersion / *ProductVersion are stamped by scripts/set-version.ps1 — keep them literal.
 VersionInfoVersion=3.3.7.0
 VersionInfoProductVersion=3.3.7.0
+VersionInfoProductName={#MyAppName}
+VersionInfoDescription={#MyAppName} Installer
+VersionInfoCompany={#MyAppPublisher}
+VersionInfoCopyright={#MyAppCopyright}
+AppCopyright={#MyAppCopyright}
 DefaultDirName="{autopf64}\UniGetUI"
 DisableProgramGroupPage=yes
 DisableDirPage=no
@@ -67,33 +75,8 @@ Uninstallable=WizardIsTaskSelected('regularinstall')
 AppModifyPath="{app}\UniGetUI.Installer.exe" /silent /NoDeployInstaller
 
 
-[Languages]
-Name: "English"; MessagesFile: "compiler:Default.isl"
-Name: "Armenian"; MessagesFile: "compiler:Languages\Armenian.isl"
-Name: "BrazilianPortuguese"; MessagesFile: "compiler:Languages\BrazilianPortuguese.isl"
-Name: "Catalan"; MessagesFile: "compiler:Languages\Catalan.isl"
-Name: "Corsican"; MessagesFile: "compiler:Languages\Corsican.isl"
-Name: "Czech"; MessagesFile: "compiler:Languages\Czech.isl"
-Name: "Danish"; MessagesFile: "compiler:Languages\Danish.isl"
-Name: "Dutch"; MessagesFile: "compiler:Languages\Dutch.isl"
-Name: "Finnish"; MessagesFile: "compiler:Languages\Finnish.isl"
-Name: "French"; MessagesFile: "compiler:Languages\French.isl"
-Name: "German"; MessagesFile: "compiler:Languages\German.isl"
-Name: "Hebrew"; MessagesFile: "compiler:Languages\Hebrew.isl"
-;Name: "Icelandic"; MessagesFile: "compiler:Languages\Icelandic.isl"
-Name: "Italian"; MessagesFile: "compiler:Languages\Italian.isl"
-Name: "Japanese"; MessagesFile: "compiler:Languages\Japanese.isl"
-Name: "Korean"; MessagesFile: "compiler:Languages\Korean.isl"
-Name: "Norwegian"; MessagesFile: "compiler:Languages\Norwegian.isl"
-Name: "Polish"; MessagesFile: "compiler:Languages\Polish.isl"
-Name: "Portuguese"; MessagesFile: "compiler:Languages\Portuguese.isl"
-Name: "Russian"; MessagesFile: "compiler:Languages\Russian.isl"
-Name: "Slovenian"; MessagesFile: "compiler:Languages\Slovenian.isl"
-Name: "Spanish"; MessagesFile: "compiler:Languages\Spanish.isl"
-Name: "Turkish"; MessagesFile: "compiler:Languages\Turkish.isl"
-Name: "Ukrainian"; MessagesFile: "compiler:Languages\Ukrainian.isl" 
-
-; Include installer's messages
+; Include installer's languages and messages
+#include "InstallerExtras\Languages.iss"
 #include "InstallerExtras\CustomMessages.iss"
 
 [Code]
@@ -116,6 +99,8 @@ procedure InitializeWizard;
 begin
   WizardForm.Bevel.Visible := False;
   WizardForm.Bevel1.Visible := True;
+  // DisableWelcomePage=no makes Inno caption use AppName alone; put the version back in.
+  WizardForm.Caption := FmtMessage(SetupMessage(msgSetupWindowTitle), ['{#MyAppName} {#MyAppVersion}']);
 end;
 
 // Kills all instances of an image and loops until none remain (taskkill returns 0 while killing, 128 when none left).
@@ -264,9 +249,7 @@ begin
     not IsDirNameValid(WizardForm.DirEdit.Text) then
   begin
     Result := False;
-    MsgBox('There is an invalid character in the selected install location. ' +
-      'Install location cannot contain special characters. ' +
-      'Please input a valid path to continue, such as '+ExpandConstant('{commonpf64}')+'\UniGetUI', mbError, MB_OK);
+    MsgBox(FmtMessage(CustomMessage('InvalidInstallPath'), [ExpandConstant('{commonpf64}') + '\UniGetUI']), mbError, MB_OK);
   end;
 end;
 
@@ -341,7 +324,7 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: re
 [Run]
 ; Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File -NonInteractive ""{tmp}\EnsureWinGet.ps1"""; StatusMsg: "Ensuring WinGet is properly installed... (this may take a while)"; WorkingDir: {app}; Check: not CmdLineParamExists('/NoWinGet'); Flags: runhidden
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: runasoriginaluser nowait postinstall; Check: ShouldLaunchAfterInstall;
-Filename: "{app}\{#MyAppExeName}"; Parameters: "--migrate-wingetui-to-unigetui"; StatusMsg: "Removing old icons...";
+Filename: "{app}\{#MyAppExeName}"; Parameters: "--migrate-wingetui-to-unigetui"; StatusMsg: "{cm:RemovingOldIcons}";
 
 
 [UninstallRun]    
