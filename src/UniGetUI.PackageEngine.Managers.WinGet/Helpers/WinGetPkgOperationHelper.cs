@@ -486,7 +486,10 @@ internal sealed class WinGetPkgOperationHelper : BasePkgOperationHelper
     /// from the registry. A stale CustomInstallLocation in the saved InstallOptions would
     /// otherwise leave the location off and cause WinGet to uninstall the portable from
     /// its custom path and reinstall to the default portable root, silently deleting the
-    /// original directory. The saved value is only honored under WinGetForceLocationOnUpdate.
+    /// original directory.
+    /// A location set explicitly for this package is honored on update (issue #5164); a
+    /// location inherited from the manager-wide default stays opt-in behind
+    /// WinGetForceLocationOnUpdate so updates don't relocate existing installs (issue #4210).
     /// </summary>
     internal static string? GetEffectiveUpdateLocation(IPackage package, InstallOptions options)
     {
@@ -498,7 +501,10 @@ internal sealed class WinGetPkgOperationHelper : BasePkgOperationHelper
 
         if (
             options.CustomInstallLocation != ""
-            && Settings.Get(Settings.K.WinGetForceLocationOnUpdate)
+            && (
+                options.CustomInstallLocationIsExplicit
+                || Settings.Get(Settings.K.WinGetForceLocationOnUpdate)
+            )
         )
         {
             return options.CustomInstallLocation;
