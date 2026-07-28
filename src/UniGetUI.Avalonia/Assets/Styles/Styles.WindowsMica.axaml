@@ -16,7 +16,7 @@
             <!-- Window/page surface goes transparent so Mica shows behind chrome + page -->
             <SolidColorBrush x:Key="MicaPageBackground"          Color="Transparent"/>
             <!-- Cards / panels: translucent white layers over the (light) Mica -->
-            <SolidColorBrush x:Key="SettingsCardBackground"      Color="#80FFFFFF"/>
+            <SolidColorBrush x:Key="SettingsCardBackground"      Color="#B3FFFFFF"/>
             <SolidColorBrush x:Key="SettingsCardBorderBrush"     Color="#14000000"/>
             <!-- Package list: near-transparent so Mica shows through, matching WinUI's SystemFillColorNeutralBackground -->
             <SolidColorBrush x:Key="PackageListBackground"       Color="#06000000"/>
@@ -30,7 +30,7 @@
             <SolidColorBrush x:Key="AppDialogDarkBackground"     Color="#80FFFFFF"/>
             <!-- Flyouts / menus / dropdowns / tooltips: DWM acrylic backdrop with the card tint over it -->
             <SolidColorBrush x:Key="FlyoutPresenterBackground"     Color="#80FFFFFF"/>
-            <SolidColorBrush x:Key="MenuFlyoutPresenterBackground" Color="#80FFFFFF"/>
+            <SolidColorBrush x:Key="MenuFlyoutPresenterBackground" Color="#FFFFFFFF"/>
             <SolidColorBrush x:Key="ComboBoxDropDownBackground"    Color="#80FFFFFF"/>
             <SolidColorBrush x:Key="ToolTipBackground"             Color="#80FFFFFF"/>
             <!-- Expander chrome -->
@@ -53,8 +53,8 @@
 
         <ResourceDictionary x:Key="Dark">
             <SolidColorBrush x:Key="MicaPageBackground"          Color="Transparent"/>
-            <!-- Cards / panels: translucent dark layers; ~40% so the wallpaper-tinted Mica bleeds through -->
-            <SolidColorBrush x:Key="SettingsCardBackground"      Color="#662D2D2D"/>
+            <!-- Cards / panels: WinUI's translucent card layer over the Mica backdrop -->
+            <SolidColorBrush x:Key="SettingsCardBackground"      Color="#0DFFFFFF"/>
             <SolidColorBrush x:Key="SettingsCardBorderBrush"     Color="#26FFFFFF"/>
             <!-- Package list: near-transparent so Mica shows through, matching WinUI's SystemFillColorNeutralBackground -->
             <SolidColorBrush x:Key="PackageListBackground"       Color="#08FFFFFF"/>
@@ -71,7 +71,7 @@
                  stays readably dark even when the popup floats over bright content (e.g. the release-notes
                  WebView) — a lighter tint let the white page wash the menu out (#5007) -->
             <SolidColorBrush x:Key="FlyoutPresenterBackground"     Color="#BF2D2D2D"/>
-            <SolidColorBrush x:Key="MenuFlyoutPresenterBackground" Color="#BF2D2D2D"/>
+            <SolidColorBrush x:Key="MenuFlyoutPresenterBackground" Color="#FF2C2C2C"/>
             <SolidColorBrush x:Key="ComboBoxDropDownBackground"    Color="#BF2D2D2D"/>
             <SolidColorBrush x:Key="ToolTipBackground"             Color="#BF2D2D2D"/>
             <!-- Expander chrome -->

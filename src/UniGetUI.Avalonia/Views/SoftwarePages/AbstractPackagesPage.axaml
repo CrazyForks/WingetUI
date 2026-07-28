@@ -15,6 +15,9 @@
              Name="ABSTRACT_PAGE">
 
     <UserControl.Styles>
+      <Style Selector="Border#MegaQueryContainer">
+         <Setter Property="Background" Value="{DynamicResource SearchBoxInactiveBackground}"/>
+      </Style>
       <!-- Suppress per-cell focus highlight so the whole row appears selected -->
       <Style Selector="DataGridCell:current /template/ Grid#FocusVisual">
          <Setter Property="IsVisible" Value="False"/>
@@ -29,6 +32,7 @@
       <!-- Header as one inset, rounded bar (WinUI-style): rounded + inset ends, no borders/separators -->
       <Style Selector="DataGridColumnHeader">
          <Setter Property="Background" Value="{DynamicResource PackageListHeaderBackground}"/>
+         <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}"/>
          <Setter Property="HorizontalContentAlignment" Value="Center"/>
          <Setter Property="AreSeparatorsVisible" Value="False"/>
          <Setter Property="SeparatorBrush" Value="Transparent"/>
@@ -89,6 +93,10 @@
       <Style Selector="Border#MegaQueryContainer:focus-within Border#MegaQueryUnderline">
          <Setter Property="Opacity" Value="1"/>
          <Setter Property="Background" Value="{DynamicResource SystemAccentColor}"/>
+      </Style>
+      <Style Selector="Border#MegaQueryContainer:focus-within">
+         <Setter Property="Background" Value="{DynamicResource SearchBoxFocusedBackground}"/>
+         <Setter Property="BorderBrush" Value="{DynamicResource SearchBoxFocusedBorderBrush}"/>
       </Style>
    </UserControl.Styles>
 
@@ -847,9 +855,7 @@
                             Grid.Column="1"
                             Grid.ColumnSpan="2"
                             CornerRadius="8"
-                            BorderBrush="{DynamicResource AppBorderBrush}"
                             BorderThickness="1"
-                            Background="{DynamicResource MicaPageBackground}"
                             ClipToBounds="True">
                         <Panel>
                             <Grid ColumnDefinitions="*,64">
@@ -918,9 +924,9 @@
                 <Button x:Name="OrderByButton"
                         Padding="10,6"
                         CornerRadius="4"
-                        Background="Transparent"
+                        Background="{DynamicResource SettingsCardBackground}"
                         BorderThickness="1"
-                        BorderBrush="{DynamicResource AppBorderBrush}"
+                        BorderBrush="Transparent"
                         automation:AutomationProperties.LabeledBy="{Binding #OrderByLabel}">
                     <StackPanel Orientation="Horizontal" Spacing="6">
                         <TextBlock Text="{Binding SortFieldName}" VerticalAlignment="Center" FontSize="14"/>

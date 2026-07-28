@@ -13,7 +13,7 @@
              x:DataType="vm:SidebarViewModel"
              MinWidth="64">
 
-    <Grid RowDefinitions="*,Auto">
+    <Grid x:Name="SidebarLayout" RowDefinitions="*,Auto">
 
         <!-- Main nav items -->
         <ListBox x:Name="NavListBox"
@@ -184,8 +184,7 @@
                     </StackPanel>
                 </ListBoxItem>
 
-                <!-- More: a nav item visually, but it opens a menu instead of selecting a page,
-                     so code-behind shows its flyout and re-syncs selection rather than highlighting it. -->
+                <!-- More is kept selected while its flyout is open so its navigation pill remains visible. -->
                 <ListBoxItem x:Name="MoreNavBtn" Tag="More" Classes="nav-item" Padding="4,2" CornerRadius="6"
                              automation:AutomationProperties.Name="{t:Translate More}"
                              ToolTip.Tip="{t:Translate More}">
@@ -234,5 +233,16 @@
             </ListBox>
 
         </StackPanel>
+
+        <!-- One shared indicator moves between items so selection changes use WinUI's
+             leading/trailing-edge stretch instead of fading separate item indicators. -->
+        <Canvas Grid.RowSpan="2" IsHitTestVisible="False">
+            <Border x:Name="NavigationSelectionPill"
+                    Width="3"
+                    Height="16"
+                    CornerRadius="1.5"
+                    Background="{DynamicResource AccentFillColorDefaultBrush}"
+                    IsVisible="False"/>
+        </Canvas>
     </Grid>
 </UserControl>
