@@ -1,3 +1,4 @@
+using System.Text;
 using UniGetUI.Core.Classes;
 using UniGetUI.Core.Data;
 using UniGetUI.Core.Logging;
@@ -18,6 +19,10 @@ using BrokerClientException = Devolutions.Now.Policy.Client.BrokerClientExceptio
 using BrokerClientOptions = Devolutions.Now.Policy.Client.BrokerClientOptions;
 using BrokerDecision = Devolutions.Now.Policy.Api.Decision;
 using BrokerElevation = Devolutions.Now.Policy.Api.Elevation;
+using BrokerEventFrame = Devolutions.Now.Policy.Api.EventFrame;
+using BrokerEventFrameException = Devolutions.Now.Policy.Api.EventFrameException;
+using BrokerExecutionResponse = Devolutions.Now.Policy.Api.ExecutionResponse;
+using BrokerOperationEventChannel = Devolutions.Now.Policy.Client.OperationEventChannel;
 using BrokerOperationStatus = Devolutions.Now.Policy.Api.OperationStatus;
 using BrokerStatusResponse = Devolutions.Now.Policy.Api.StatusResponse;
 using OperationCancelQuery = Devolutions.Now.Policy.Client.OperationCancelQuery;
@@ -235,14 +240,29 @@ namespace UniGetUI.PackageEngine.Operations
             && !package.Source.IsVirtualManager;
 
         /// <summary>
+        /// Raw process output streamed over the event channel of the current brokered
+        /// run, in emission order. Null when no streamed output was captured (no event
+        /// channel, or streaming failed); result parsers then receive an empty list.
+        /// </summary>
+        private List<string>? _brokerStreamedOutput;
+
+        /// <summary>
         /// Perform the package operation through the Devolutions Agent broker.
         /// Sends the request over named pipe and interprets the response.
         /// </summary>
         private async Task<OperationVeredict> PerformBrokerOperation()
         {
+            _brokerStreamedOutput = null;
             Line("Routing operation through Devolutions Agent broker...", LineType.Information);
 
-            using var client = CreateBrokerClient(RequiresAdminRights());
+            // Apply manager-specific elevation requirements (e.g. WinGet's detection of
+            // machine-scope or elevation-requiring installers) before deciding the requested
+            // elevation, mirroring the local execution path where this runs as part of
+            // building the process parameters.
+            Package.Manager.OperationHelper.ApplyElevationRequirements(Package, Options, Role);
+
+            bool requestElevated = RequiresAdminRights();
+            using var client = CreateBrokerClient(requestElevated);
 
             // Check broker availability. Brokered operations must not fall back to local
             // execution: policy evaluation and kill/pre/post actions are owned by the broker.
@@ -262,6 +282,7 @@ namespace UniGetUI.PackageEngine.Operations
             Line($"  Package: {request.Package.Id} ({request.Operation})", LineType.VerboseDetails);
             Line($"  Manager: {request.Manager}", LineType.VerboseDetails);
             Line($"  User: {GetEffectiveUser()}", LineType.VerboseDetails);
+            Line($"  Elevation: {(requestElevated ? "Elevated" : "Standard")}", LineType.VerboseDetails);
 
             try
             {
@@ -290,16 +311,32 @@ namespace UniGetUI.PackageEngine.Operations
                 string operationId = execution.Operation.OperationId;
                 Line($"Broker accepted operation: {operationId}", LineType.VerboseDetails);
 
-                // NOTE: execution.Operation.EventChannel (live output streaming) is intentionally
-                // not consumed yet; brokered operations show no captured output until then.
-
-                BrokerStatusResponse status;
+                // Bound the whole tracking phase (streaming or polling) so a broker that
+                // never reports a terminal status cannot hang the operation forever.
                 using var operationTimeout = new CancellationTokenSource(BrokerOperationTimeout);
-                using var polling = CancellationTokenSource.CreateLinkedTokenSource(
+                using var tracking = CancellationTokenSource.CreateLinkedTokenSource(
                     CancellationToken, operationTimeout.Token);
                 try
                 {
-                    status = await WaitForBrokerTerminalStatus(client, operationId, polling.Token);
+                    // Prefer live status/output streaming over the per-operation event channel
+                    // when the broker advertises one; otherwise (or if streaming breaks) fall
+                    // back to plain status polling without live output.
+                    if (execution.Operation.EventChannel is not null)
+                    {
+                        OperationVeredict? streamed = await StreamBrokerOperationEvents(
+                            client, execution, operationId, tracking.Token);
+                        if (streamed is not null)
+                        {
+                            return streamed.Value;
+                        }
+                    }
+                    else
+                    {
+                        Logger.Info("[AgentBroker] The broker did not advertise an event channel; using status polling without live output.");
+                    }
+
+                    BrokerStatusResponse status = await WaitForBrokerTerminalStatus(client, operationId, tracking.Token);
+                    return await InterpretBrokerTerminalStatus(status);
                 }
                 catch (OperationCanceledException) when (CancellationToken.IsCancellationRequested)
                 {
@@ -315,8 +352,6 @@ namespace UniGetUI.PackageEngine.Operations
                     Metadata.FailureMessage = timeoutMessage;
                     return OperationVeredict.Failure;
                 }
-
-                return await InterpretBrokerTerminalStatus(status);
             }
             catch (OperationCanceledException)
             {
@@ -338,6 +373,142 @@ namespace UniGetUI.PackageEngine.Operations
                 Metadata.FailureMessage = ex.Message;
                 return OperationVeredict.Failure;
             }
+        }
+
+        /// <summary>
+        /// Consumes the per-operation event channel advertised by the broker, emitting
+        /// live stdout/stderr output and reacting to status-change hints. Returns the
+        /// final operation veredict, or <c>null</c> when streaming could not be used and
+        /// the caller should fall back to plain status polling. The supplied token combines
+        /// user cancellation with the overall operation timeout; timeout-induced
+        /// cancellations propagate to the caller as <see cref="OperationCanceledException"/>.
+        /// </summary>
+        private async Task<OperationVeredict?> StreamBrokerOperationEvents(
+            BrokerClient client,
+            BrokerExecutionResponse execution,
+            string operationId,
+            CancellationToken trackingToken)
+        {
+            BrokerOperationEventChannel channel;
+            try
+            {
+                channel = await client.OpenEventChannel(execution, trackingToken);
+            }
+            catch (OperationCanceledException) when (CancellationToken.IsCancellationRequested)
+            {
+                return await CancelBrokerOperation(client, operationId);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                Logger.Warn($"[AgentBroker] Could not open the operation event channel; falling back to status polling: {ex}");
+                Line("Live output is not available for this operation; progress will be tracked via status polling.", LineType.Information);
+                return null;
+            }
+
+            Line("Live output streaming enabled via broker event channel.", LineType.VerboseDetails);
+            var capturedOutput = new List<string>();
+            _brokerStreamedOutput = capturedOutput;
+            var stdout = new StreamedOutputLineBuffer(this, LineType.Information, capturedOutput);
+            var stderr = new StreamedOutputLineBuffer(this, LineType.Error, capturedOutput);
+
+            await using (channel.ConfigureAwait(false))
+            {
+                try
+                {
+                    BrokerOperationStatus? lastReportedStatus = null;
+                    await foreach (var frame in channel.ReadEvents(trackingToken))
+                    {
+                        switch (frame)
+                        {
+                            case BrokerEventFrame.Stdout frameData:
+                                stdout.Append(frameData.Data);
+                                break;
+                            case BrokerEventFrame.Stderr frameData:
+                                stderr.Append(frameData.Data);
+                                break;
+                            case BrokerEventFrame.StdoutOverflow overflow:
+                                Line($"Warning: {overflow.BytesSkipped} bytes of process output were skipped by the broker.", LineType.Information);
+                                break;
+                            case BrokerEventFrame.StderrOverflow overflow:
+                                Line($"Warning: {overflow.BytesSkipped} bytes of process error output were skipped by the broker.", LineType.Information);
+                                break;
+                            case BrokerEventFrame.StatusUpdated:
+                                var updated = await client.QueryStatus(
+                                    new OperationStatusQuery { OperationId = operationId },
+                                    trackingToken);
+                                if (updated.Status != lastReportedStatus)
+                                {
+                                    lastReportedStatus = updated.Status;
+                                    Line($"Broker operation status: {updated.Status}", LineType.VerboseDetails);
+                                }
+                                break;
+                                // Hello and Finish frames need no handling here: the channel
+                                // validates the handshake, and Finish ends the enumeration.
+                        }
+                    }
+                }
+                catch (OperationCanceledException) when (CancellationToken.IsCancellationRequested)
+                {
+                    return await CancelBrokerOperationWhileStreaming(client, channel, operationId, stdout, stderr);
+                }
+                catch (OperationCanceledException)
+                {
+                    // Operation-timeout cancellation: surface any buffered output before
+                    // letting the caller report the timeout failure.
+                    stdout.Flush();
+                    stderr.Flush();
+                    throw;
+                }
+                catch (Exception ex) when (ex is BrokerEventFrameException or IOException)
+                {
+                    // The frame stream is corrupt or the transport failed; the operation
+                    // itself is still running on the broker. Fall back to status polling.
+                    stdout.Flush();
+                    stderr.Flush();
+                    Logger.Warn($"[AgentBroker] The operation event channel failed mid-stream; falling back to status polling: {ex}");
+                    Line("Live output streaming was interrupted; progress will be tracked via status polling.", LineType.Information);
+                    return null;
+                }
+
+                stdout.Flush();
+                stderr.Flush();
+            }
+
+            BrokerStatusResponse status;
+            try
+            {
+                status = await QueryBrokerTerminalStatus(client, operationId, trackingToken);
+            }
+            catch (OperationCanceledException) when (CancellationToken.IsCancellationRequested)
+            {
+                return await CancelBrokerOperation(client, operationId);
+            }
+
+            return await InterpretBrokerTerminalStatus(status);
+        }
+
+        /// <summary>
+        /// Queries the broker for the operation status, and keeps polling until a
+        /// terminal status is reported. Unlike <see cref="WaitForBrokerTerminalStatus"/>,
+        /// the first query happens immediately (no initial delay).
+        /// </summary>
+        private static async Task<BrokerStatusResponse> QueryBrokerTerminalStatus(
+            BrokerClient client,
+            string operationId,
+            CancellationToken cancellationToken)
+        {
+            var status = await client.QueryStatus(
+                new OperationStatusQuery { OperationId = operationId },
+                cancellationToken);
+
+            if (status.Status is BrokerOperationStatus.Completed
+                or BrokerOperationStatus.Failed
+                or BrokerOperationStatus.Canceled)
+            {
+                return status;
+            }
+
+            return await WaitForBrokerTerminalStatus(client, operationId, cancellationToken);
         }
 
         /// <summary>
@@ -374,6 +545,63 @@ namespace UniGetUI.PackageEngine.Operations
         /// </summary>
         private async Task<OperationVeredict> CancelBrokerOperation(BrokerClient client, string operationId)
         {
+            await RequestBrokerCancel(client, operationId);
+            return await ConfirmBrokerCancellation(client, operationId);
+        }
+
+        /// <summary>
+        /// Cancellation flow used while consuming the event channel: after asking the
+        /// broker to cancel, keeps draining the channel (bounded) so the tail of the
+        /// process output and the Finish frame are honored, then confirms the terminal
+        /// status over the regular status endpoint. If draining fails, falls back to
+        /// the plain poll-based confirmation.
+        /// </summary>
+        private async Task<OperationVeredict> CancelBrokerOperationWhileStreaming(
+            BrokerClient client,
+            BrokerOperationEventChannel channel,
+            string operationId,
+            StreamedOutputLineBuffer stdout,
+            StreamedOutputLineBuffer stderr)
+        {
+            await RequestBrokerCancel(client, operationId);
+
+            try
+            {
+                using var drainTimeout = new CancellationTokenSource(BrokerCancelConfirmTimeout);
+                await foreach (var frame in channel.ReadEvents(drainTimeout.Token))
+                {
+                    switch (frame)
+                    {
+                        case BrokerEventFrame.Stdout frameData:
+                            stdout.Append(frameData.Data);
+                            break;
+                        case BrokerEventFrame.Stderr frameData:
+                            stderr.Append(frameData.Data);
+                            break;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn($"[AgentBroker] Could not drain the event channel of canceled operation {operationId}: {ex}");
+            }
+            finally
+            {
+                stdout.Flush();
+                stderr.Flush();
+            }
+
+            return await ConfirmBrokerCancellation(client, operationId);
+        }
+
+        /// <summary>
+        /// Best-effort broker-side cancel request, bounded by
+        /// <see cref="BrokerCancelRequestTimeout"/>. Failures are logged but not
+        /// surfaced: the cancel request is idempotent, and the operation may already
+        /// have reached a terminal state.
+        /// </summary>
+        private async Task RequestBrokerCancel(BrokerClient client, string operationId)
+        {
             Line("Cancellation requested; asking broker to cancel the remote operation...", LineType.Information);
 
             try
@@ -386,16 +614,23 @@ namespace UniGetUI.PackageEngine.Operations
             }
             catch (Exception ex)
             {
-                // Best-effort: the cancel request is idempotent, and the operation may already
-                // have reached a terminal state. Still wait below for the terminal status.
                 Logger.Warn($"[AgentBroker] Cancel request for operation {operationId} failed: {ex}");
                 Line("Broker cancel request failed; checking final operation status...", LineType.Information);
             }
+        }
 
+        /// <summary>
+        /// Waits (bounded) for a canceled operation to reach a terminal status. The
+        /// remote process may win the race and complete or fail before the cancel takes
+        /// effect; in that case the terminal status is honored instead of reporting a
+        /// cancellation.
+        /// </summary>
+        private async Task<OperationVeredict> ConfirmBrokerCancellation(BrokerClient client, string operationId)
+        {
             try
             {
                 using var confirmTimeout = new CancellationTokenSource(BrokerCancelConfirmTimeout);
-                var status = await WaitForBrokerTerminalStatus(client, operationId, confirmTimeout.Token);
+                var status = await QueryBrokerTerminalStatus(client, operationId, confirmTimeout.Token);
 
                 if (status.Status is not BrokerOperationStatus.Canceled)
                 {
@@ -434,9 +669,10 @@ namespace UniGetUI.PackageEngine.Operations
 
             if (status.Status is BrokerOperationStatus.Completed)
             {
-                // Captured output is not available anymore over the status endpoint; live
-                // output will be restored through the per-operation event channel.
-                var veredict = await GetProcessVeredict(status.ExitCode ?? -1, []);
+                // Feed the process output streamed over the event channel (if any) to
+                // the manager's result parser, like the local process path does. Only
+                // real process output is passed; internal informational lines are not.
+                var veredict = await GetProcessVeredict(status.ExitCode ?? -1, _brokerStreamedOutput ?? []);
                 if (veredict is OperationVeredict.Success)
                 {
                     Line("Operation completed successfully via agent broker.", LineType.Information);
@@ -473,6 +709,96 @@ namespace UniGetUI.PackageEngine.Operations
             Metadata.FailureMessage = message;
             BrokerUnavailable?.Invoke(this, message);
             return OperationVeredict.Failure;
+        }
+
+        /// <summary>
+        /// Buffers streamed process output and emits it line by line through
+        /// <see cref="AbstractOperation.Line"/>, mirroring the local process reader:
+        /// LF-terminated text is emitted with the configured line type, while
+        /// CR-terminated text (progress bars) is emitted as a progress indicator and
+        /// promoted to a regular line when followed by a bare LF. Regular (non-progress)
+        /// lines are also recorded in <paramref name="capturedOutput"/> so the manager's
+        /// result parser receives only real process output.
+        /// </summary>
+        private sealed class StreamedOutputLineBuffer(
+            PackageOperation owner,
+            LineType lineType,
+            List<string> capturedOutput)
+        {
+            private readonly StringBuilder _pending = new();
+            private string? _lastLineBeforeLF;
+
+            public void Append(string data)
+            {
+                ReadOnlySpan<char> remaining = data;
+                while (!remaining.IsEmpty)
+                {
+                    int terminatorIndex = remaining.IndexOfAny('\r', '\n');
+                    if (terminatorIndex < 0)
+                    {
+                        _pending.Append(remaining);
+                        break;
+                    }
+
+                    _pending.Append(remaining[..terminatorIndex]);
+                    char terminator = remaining[terminatorIndex];
+                    remaining = remaining[(terminatorIndex + 1)..];
+
+                    if (terminator == '\n')
+                    {
+                        if (_pending.Length == 0)
+                        {
+                            // A bare LF after a CR-terminated line (CRLF): promote the
+                            // progress line to a regular line.
+                            if (_lastLineBeforeLF is not null)
+                            {
+                                EmitLine(_lastLineBeforeLF);
+                                _lastLineBeforeLF = null;
+                            }
+
+                            continue;
+                        }
+
+                        EmitLine(_pending.ToString());
+                        _pending.Clear();
+                        // New text arrived after the CR: the progress line was
+                        // superseded and must not be promoted by a later bare LF.
+                        _lastLineBeforeLF = null;
+                    }
+                    else
+                    {
+                        if (_pending.Length == 0)
+                        {
+                            continue;
+                        }
+
+                        _lastLineBeforeLF = _pending.ToString();
+                        owner.Line(_lastLineBeforeLF, LineType.ProgressIndicator);
+                        _pending.Clear();
+                    }
+                }
+            }
+
+            /// <summary>
+            /// Emits any remaining partial line (e.g. output not terminated by a newline
+            /// when the channel finished).
+            /// </summary>
+            public void Flush()
+            {
+                if (_pending.Length > 0)
+                {
+                    EmitLine(_pending.ToString());
+                    _pending.Clear();
+                }
+
+                _lastLineBeforeLF = null;
+            }
+
+            private void EmitLine(string line)
+            {
+                owner.Line(line, lineType);
+                capturedOutput.Add(line);
+            }
         }
 
         private static BrokerClient CreateBrokerClient(bool requestedElevation) =>
